@@ -98,4 +98,95 @@ final class ReminderEngineTests: XCTestCase {
         XCTAssertEqual(s.eyeAccum, 30)
         XCTAssertEqual(s.waterAccum, 30)
     }
+
+    // 熬夜基准: 2026-07-07 00:47:00(isNight 命中)。
+    private var nightBase: Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 7
+        comps.hour = 0; comps.minute = 47; comps.second = 0
+        return Calendar.current.date(from: comps)!
+    }
+
+    func testWaterFiresAndResets() {
+        let cfg = ReminderConfig()  // water 60min
+        var s = ReminderState(waterAccum: cfg.waterThreshold - 5, lastSample: base)
+        let t = base.addingTimeInterval(10)  // dt=10 → 越过阈值
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.contains(.water))
+        XCTAssertEqual(s.waterAccum, 0)
+    }
+
+    func testEyeFiresAndResets() {
+        let cfg = ReminderConfig()  // eye 30min
+        var s = ReminderState(eyeAccum: cfg.eyeThreshold - 5, lastSample: base)
+        let t = base.addingTimeInterval(10)
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.contains(.eye))
+        XCTAssertEqual(s.eyeAccum, 0)
+    }
+
+    func testNightFiresWhenActiveAndClockInWindow() {
+        let cfg = ReminderConfig()
+        var s = ReminderState(lastSample: nightBase.addingTimeInterval(-10))
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: nightBase, idleSeconds: 0))
+        XCTAssertTrue(r.contains(.night(clock: "00:47")))
+        XCTAssertEqual(s.lastNightAlert, nightBase)
+    }
+
+    func testNightRepeatIntervalSuppressesThenFires() {
+        let cfg = ReminderConfig()  // nightRepeat 30min
+        var s = ReminderState(lastSample: nightBase, lastNightAlert: nightBase)
+        var r: [Reminder]
+        let t1 = nightBase.addingTimeInterval(10 * 60)  // 10min(< 30min)不重复
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t1, idleSeconds: 0))
+        XCTAssertFalse(r.contains { if case .night = $0 { return true } else { return false } })
+        let t2 = t1.addingTimeInterval(25 * 60)  // 累计 35min(> 30min)应重复
+        (_, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t2, idleSeconds: 0))
+        XCTAssertTrue(r.contains { if case .night = $0 { return true } else { return false } })
+    }
+
+    func testNightNoFireWhenNotActive() {
+        let cfg = ReminderConfig()
+        let s = ReminderState(lastSample: nightBase.addingTimeInterval(-10))
+        // idle 超 restThreshold、无 CC → rest(非 active)→ 不产 night
+        let (_, r) = ReminderEngine.advance(
+            s, config: cfg,
+            sample: Sample(now: nightBase, idleSeconds: cfg.restThreshold + 1)
+        )
+        XCTAssertFalse(r.contains { if case .night = $0 { return true } else { return false } })
+    }
+
+    func testMutedSuppressesRemindersButKeepsTiming() {
+        var cfg = ReminderConfig()
+        cfg.mutedUntil = base.addingTimeInterval(3600)  // 1h 后才解除
+        var s = ReminderState(waterAccum: cfg.waterThreshold - 5, eyeAccum: cfg.eyeThreshold - 5, lastSample: base)
+        let t = base.addingTimeInterval(10)
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.isEmpty)  // muted → 不产出
+        XCTAssertEqual(s.waterAccum, 0)  // 但 water 已触发清零(计时照常)
+        XCTAssertEqual(s.eyeAccum, 0)
+    }
+
+    func testMultipleRemindersInOrder() {
+        var cfg = ReminderConfig()
+        cfg.sitEnabled = true; cfg.waterEnabled = true; cfg.eyeEnabled = true; cfg.nightEnabled = true
+        var s = ReminderState(
+            sitAccum: cfg.sitThreshold - 5,
+            waterAccum: cfg.waterThreshold - 5,
+            eyeAccum: cfg.eyeThreshold - 5,
+            lastSample: nightBase.addingTimeInterval(-10)
+        )
+        let t = nightBase  // isNight 命中, active
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0, project: "P"))
+        XCTAssertEqual(r.count, 4)  // 顺序: sit, water, eye, night
+        if case .sit = r[0] {} else { XCTFail("r[0] should be .sit") }
+        XCTAssertEqual(r[1], .water)
+        XCTAssertEqual(r[2], .eye)
+        if case .night = r[3] {} else { XCTFail("r[3] should be .night") }
+    }
 }

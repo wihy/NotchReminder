@@ -3,7 +3,7 @@ import Foundation
 /// 纯逻辑状态机。无副作用、不依赖 AppKit, 可 `swift test`。
 public enum ReminderEngine {
 
-    /// 墙钟是否处于「熬夜」窗口: hour >= 23 或 hour < 2(即 23:00–01:59)。
+    /// 墙钟是否处于「熬夜」窗口: hour >= 23 或 hour < 2(即 23:00–01:59)。窗口边界固定, 不暴露给用户调(见 Task 4 范围说明)。
     public static func isNight(_ now: Date, calendar: Calendar = .current) -> Bool {
         let hour = calendar.component(.hour, from: now)
         return hour >= 23 || hour < 2
@@ -18,7 +18,18 @@ public enum ReminderEngine {
     }
 
     /// 纯函数: 喂入当前状态 + 配置 + 一次采样, 返回更新后状态与本次要产出的提醒列表。
-    /// 本 Task 只实现 dt / active / rest / sit / CC 口径; water/eye/night 分支在 Task 4 补齐。
+    ///
+    /// 计时口径(spec §5.3):
+    /// - dt = lastSample==nil ? 0 : now - lastSample; dt<0 视为 0; dt>restThreshold 视为休眠(按真休息处理)。
+    /// - byInput = idleSeconds < activeIdleCeiling
+    /// - byCC = ccActive && ccLastEvent!=nil && (now-ccLastEvent) < ccGrace
+    /// - active = byInput || byCC
+    /// - rest = (idleSeconds>=restThreshold && !byCC) || dt>restThreshold
+    /// - rest: sitAccum=0、eyeAccum=0, water 暂停(不加不清)。
+    /// - active(非 rest): 三累加 += dt。
+    /// - 灰区(既非 active 也非 rest): 三累加不变。
+    ///
+    /// 触发(muted 时计时照常但不产出任何 Reminder, 见 §5.4), 按 sit,water,eye,night 顺序 append。
     public static func advance(
         _ state: ReminderState,
         config: ReminderConfig,
@@ -60,7 +71,7 @@ public enum ReminderEngine {
 
         newState.lastSample = now
 
-        // ---- 4) 触发判断(本 Task 仅 sit) ----
+        // ---- 4) 触发判断(顺序: sit, water, eye, night) ----
         var reminders: [Reminder] = []
 
         // sit
@@ -72,6 +83,30 @@ public enum ReminderEngine {
             if snoozeOK {
                 reminders.append(.sit(minutes: Int(newState.sitAccum / 60), project: sample.project))
                 newState.lastSitAlert = now  // 不清 sitAccum
+            }
+        }
+
+        // water
+        if config.waterEnabled && newState.waterAccum >= config.waterThreshold {
+            reminders.append(.water)
+            newState.waterAccum = 0
+        }
+
+        // eye
+        if config.eyeEnabled && newState.eyeAccum >= config.eyeThreshold {
+            reminders.append(.eye)
+            newState.eyeAccum = 0
+        }
+
+        // night
+        if config.nightEnabled && active && isNight(now) {
+            let repeatOK: Bool = {
+                guard let lastAlert = newState.lastNightAlert else { return true }
+                return now.timeIntervalSince(lastAlert) >= config.nightRepeat
+            }()
+            if repeatOK {
+                reminders.append(.night(clock: clockString(now)))
+                newState.lastNightAlert = now
             }
         }
 
