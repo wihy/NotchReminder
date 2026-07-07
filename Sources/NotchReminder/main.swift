@@ -28,9 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         c.start()
     }
 
-    /// 菜单「测试提醒」回调: 弹刘海测试卡片。选择器在主线程触发, 与 @MainActor 一致。
+    /// 菜单「测试提醒」回调: 弹刘海水提醒卡片(轻样式, ~4s 自动收)。选择器在主线程触发, 与 @MainActor 一致。
     @objc private func fireTest() {
-        presenter.showTest()
+        presenter.present(.water, onAction: nil)
     }
 }
 

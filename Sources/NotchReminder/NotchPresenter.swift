@@ -1,72 +1,106 @@
-import AppKit
+import SwiftUI
 import DynamicNotchKit
 import ReminderCore
 
-/// 强样式浮层「起身5分钟」/「知道了」两个按钮对应的动作(CONTRACT §C2)。
+/// 强样式浮层上「起身5分钟」/「知道了」两个按钮对应的动作(CONTRACT §C2)。
 public enum SitAction: Equatable {
     case snooze   // 起身5分钟: 记真休息意图(由 AppController 清 sit 计时)
     case dismiss  // 知道了: 仅收起
 }
 
-/// 封装 DynamicNotchKit 的最小刘海浮层入口。
-/// DynamicNotchInfo.init 本身非 @MainActor(可任意上下文构造); 仅 expand/hide 经
-/// DynamicNotchControllable 协议为 @MainActor async, 故 showTest() 标 @MainActor 以承载 await。
-/// Task 5 会用 present(_:onAction:) 取代 showTest(), 并保留 public 可访问性。
-@MainActor public final class NotchPresenter {
+/// 封装 DynamicNotchKit 的强/轻样式渲染。整类 @MainActor: 库的展开/收起方法均 @MainActor 隔离(经协议)。
+@MainActor
+public final class NotchPresenter {
+    /// 轻样式停留时长(秒)。expand() 自身另含 ~0.4s 动画等待, 此为额外停留。
+    private let autoHideSeconds: TimeInterval = 4
+
+    /// 当前强样式浮层实例。持有引用以便按钮回调里 hide, 以及被下一条强提醒替换时先收起旧的。
+    private var strongNotch: DynamicNotch<StrongReminderView, EmptyView, EmptyView>?
+
     public init() {}
 
-    /// 唯一对外渲染入口。本 Task(阶段1)四类都做成 DynamicNotchInfo 占位卡片(停留数秒自动收),
-    /// onAction 暂不触发; Task 5 把 sit/night 升级为带按钮的强样式(回调 onAction)、water/eye 改轻样式。
-    @MainActor
+    /// 唯一对外渲染入口(CONTRACT §C2)。把一条 Reminder 映射到刘海浮层。
     public func present(_ r: Reminder, onAction: ((SitAction) -> Void)?) {
-        let info: DynamicNotchInfo
         switch r {
         case let .sit(minutes, project):
-            let suffix = project.map { " · \($0) 项目" } ?? ""
-            info = DynamicNotchInfo(
-                icon: .init(systemName: "figure.walk", color: .orange),
-                title: "该起身了",
-                description: "连续 \(minutes) 分钟\(suffix) / 起来走两步"
-            )
-        case .water:
-            info = DynamicNotchInfo(
-                icon: .init(systemName: "drop.fill", color: .blue),
-                title: "喝口水",
-                description: "累计工作到点了 / 补个水"
-            )
-        case .eye:
-            info = DynamicNotchInfo(
-                icon: .init(systemName: "eye.fill", color: .green),
-                title: "护眼远眺",
-                description: "看看 6 米外的东西 20 秒"
+            presentStrong(
+                title: sitTitle(minutes: minutes, project: project),
+                subtitle: "起来走两步, 眼睛也歇歇",
+                showSnooze: true,
+                onAction: onAction
             )
         case let .night(clock):
-            info = DynamicNotchInfo(
-                icon: .init(systemName: "moon.stars.fill", color: .purple),
+            presentStrong(
                 title: "\(clock) 了",
-                description: "明天的你会感谢现在睡觉的你"
+                subtitle: "明天的你会感谢现在睡觉的你",
+                showSnooze: false,
+                onAction: onAction
+            )
+        case .water:
+            presentLight(systemName: "drop.fill", color: .blue, title: "喝口水", description: "补个水, 顺手站一下")
+        case .eye:
+            presentLight(systemName: "eye.fill", color: .green, title: "远眺 20 秒", description: "看向 6 米外, 放松睫状肌")
+        }
+    }
+
+    // MARK: - 强样式
+
+    private func presentStrong(
+        title: String,
+        subtitle: String,
+        showSnooze: Bool,
+        onAction: ((SitAction) -> Void)?
+    ) {
+        // 先收起上一条强提醒(若有), 避免叠放。
+        if let old = strongNotch {
+            Task { @MainActor in await old.hide() }
+        }
+        let notch = DynamicNotch {
+            StrongReminderView(
+                title: title,
+                subtitle: subtitle,
+                showSnooze: showSnooze,
+                onSnooze: { [weak self] in
+                    onAction?(.snooze)
+                    self?.dismissStrong()
+                },
+                onDismiss: { [weak self] in
+                    onAction?(.dismiss)
+                    self?.dismissStrong()
+                }
             )
         }
+        strongNotch = notch
+        Task { @MainActor in await notch.expand() }
+    }
+
+    private func dismissStrong() {
+        guard let notch = strongNotch else { return }
+        strongNotch = nil
+        Task { @MainActor in await notch.hide() }
+    }
+
+    // MARK: - 轻样式
+
+    private func presentLight(systemName: String, color: Color, title: LocalizedStringKey, description: LocalizedStringKey) {
+        let info = DynamicNotchInfo(
+            icon: .init(systemName: systemName, color: color),
+            title: title,
+            description: description
+        )
         Task { @MainActor in
-            await info.expand()                       // 内部已含 ~0.4s 动画等待
-            try? await Task.sleep(for: .seconds(4))   // 额外停留 4s
+            await info.expand()                                   // 内含 ~0.4s 动画
+            try? await Task.sleep(for: .seconds(autoHideSeconds)) // 额外停留
             await info.hide()
         }
     }
 
-    /// 弹一张测试信息卡片(展开 → 停留 3s → 自动收起)。DynamicNotchKit 无内建 auto-hide,
-    /// 手动 expand() + Task.sleep + hide()。
-    @MainActor
-    func showTest() {
-        let info = DynamicNotchInfo(
-            icon: .init(systemName: "checkmark.seal", color: .green),   // DynamicNotchInfo.Label?
-            title: "测试提醒",                                            // LocalizedStringKey
-            description: "刘海浮层测试卡片 · NotchReminder"                // LocalizedStringKey?
-        )
-        Task { @MainActor in
-            await info.expand()                       // async; 内部含 ~0.4s 展开动画后返回
-            try? await Task.sleep(for: .seconds(3))   // 额外停留 3s
-            await info.hide()                          // 淡出并销毁窗口
+    // MARK: - 文案
+
+    private func sitTitle(minutes: Int, project: String?) -> String {
+        if let p = project, !p.isEmpty {
+            return "连续 \(minutes) 分钟了 · \(p) 项目"
         }
+        return "连续 \(minutes) 分钟了"
     }
 }

@@ -32,7 +32,7 @@ public final class AppController {
         config: ReminderConfig = ReminderConfig(),
         idleProvider: @escaping () -> Double = ActivityMonitor.currentIdleSeconds,
         clock: @escaping () -> Date = { Date() },
-        dnd: @escaping FullscreenProbe = { false }   // Task 5 改为 DoNotDisturb.isFullscreenActive
+        dnd: @escaping FullscreenProbe = DoNotDisturb.isFullscreenActive
     ) {
         self.presenter = presenter
         self._config = config
