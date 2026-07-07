@@ -19,6 +19,7 @@ public final class AppController {
     private let idleProvider: () -> Double
     private let clock: () -> Date
     private let isFullscreen: FullscreenProbe
+    private let ccReader = CCSignalReader()
     private var timer: Timer?
 
     /// 全屏期间被挡下的提醒, 按到达顺序排队, 免打扰结束后补放。
@@ -62,12 +63,13 @@ public final class AppController {
     @discardableResult
     public func tick() -> [Reminder] {
         flushPending()
+        let cc = ccReader.read()
         let sample = Sample(
             now: clock(),
             idleSeconds: idleProvider(),
-            ccActive: false,
-            ccLastEvent: nil,
-            project: nil
+            ccActive: cc?.ccActive ?? false,
+            ccLastEvent: cc?.lastEvent,
+            project: cc?.project
         )
         let (newState, reminders) = ReminderEngine.advance(_state, config: _config, sample: sample)
         _state = newState
