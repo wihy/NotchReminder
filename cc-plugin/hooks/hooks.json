@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "matcher": "*", "hooks": [
+        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/touch_activity.py\"" }
+      ] }
+    ],
+    "UserPromptSubmit": [
+      { "matcher": "*", "hooks": [
+        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/touch_activity.py\"" }
+      ] }
+    ],
+    "Stop": [
+      { "matcher": "*", "hooks": [
+        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/touch_activity.py\"" }
+      ] }
+    ],
+    "SessionEnd": [
+      { "matcher": "*", "hooks": [
+        { "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/touch_activity.py\"" }
+      ] }
+    ]
+  }
+}

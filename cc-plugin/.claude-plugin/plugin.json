@@ -1,0 +1,6 @@
+{
+  "name": "notchreminder",
+  "description": "Sensor-only plugin: writes CC activity + project name to ~/.notchreminder/cc.json for the NotchReminder menu-bar app.",
+  "version": "1.0.0",
+  "author": { "name": "chunhaixu", "email": "chunhaiyoung@foxmail.com" }
+}
