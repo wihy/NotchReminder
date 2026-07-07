@@ -26,6 +26,11 @@ let package = Package(
             name: "ReminderCoreTests",
             dependencies: ["ReminderCore"],
             path: "Tests/ReminderCoreTests"
+        ),
+        .testTarget(
+            name: "NotchReminderTests",
+            dependencies: ["NotchReminder", "ReminderCore"],
+            path: "Tests/NotchReminderTests"
         )
     ]
 )
