@@ -50,6 +50,7 @@ public final class AppController {
 
     /// 启动采样: 立即跑一次, 之后每 interval 秒一次(默认 10s, spec §5.3)。
     public func start(interval: TimeInterval = 10) {
+        timer?.invalidate()
         tick()
         let t = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }

@@ -12,7 +12,7 @@ public enum SitAction: Equatable {
 /// DynamicNotchInfo.init 本身非 @MainActor(可任意上下文构造); 仅 expand/hide 经
 /// DynamicNotchControllable 协议为 @MainActor async, 故 showTest() 标 @MainActor 以承载 await。
 /// Task 5 会用 present(_:onAction:) 取代 showTest(), 并保留 public 可访问性。
-public final class NotchPresenter {
+@MainActor public final class NotchPresenter {
     public init() {}
 
     /// 唯一对外渲染入口。本 Task(阶段1)四类都做成 DynamicNotchInfo 占位卡片(停留数秒自动收),
