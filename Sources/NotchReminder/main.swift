@@ -1,36 +1,27 @@
 import AppKit
 
-/// 菜单栏 accessory App 委托: 挂一个 NSStatusItem, 菜单含「测试提醒 / 退出」。
+/// 菜单栏 accessory App 委托: 挂一个 NSStatusItem, 完整菜单由 MenuBarController 管理。
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let presenter = NotchPresenter()
     private var controller: AppController!
+    private let settingsStore = SettingsStore()
+    private var menuBarController: MenuBarController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "hourglass", accessibilityDescription: "NotchReminder")
-        }
-        let menu = NSMenu()
-        let testItem = NSMenuItem(title: "测试提醒", action: #selector(fireTest), keyEquivalent: "")
-        testItem.target = self
-        menu.addItem(testItem)
-        menu.addItem(.separator())
-        let quitItem = NSMenuItem(title: "退出", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        menu.addItem(quitItem)
-        statusItem.menu = menu
 
-        let c = AppController(presenter: presenter)
+        let c = AppController(presenter: presenter, config: settingsStore.load())  // 初始 config 来自持久化
         c.onSitSnooze = { [weak c] in c?.manualRest() }   // snooze 与「我起身了」同一清零语义(CONTRACT §C3)
-        AppController.shared = c                            // 供 Task 7 菜单/设置窗访问
+        AppController.shared = c                            // 供菜单/设置窗访问
         controller = c
+        // Task 7: 完整菜单 + 首启引导(替换 Task 1 的占位菜单)
+        let mbc = MenuBarController(statusItem: statusItem, store: settingsStore)
+        mbc.attach()
+        menuBarController = mbc
+        FirstRunGuide.presentIfNeeded(store: settingsStore)
         c.start()
-    }
-
-    /// 菜单「测试提醒」回调: 弹刘海水提醒卡片(轻样式, ~4s 自动收)。选择器在主线程触发, 与 @MainActor 一致。
-    @objc private func fireTest() {
-        presenter.present(.water, onAction: nil)
     }
 }
 
