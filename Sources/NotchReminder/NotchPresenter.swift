@@ -17,10 +17,14 @@ public final class NotchPresenter {
     /// 当前强样式浮层实例。持有引用以便按钮回调里 hide, 以及被下一条强提醒替换时先收起旧的。
     private var strongNotch: DynamicNotch<StrongReminderView, EmptyView, EmptyView>?
 
+    /// 测试钩: present(_:onAction:) 被调用的累计次数(含无头测试环境)。内部可见, 供 @testable 测试断言。
+    private(set) var presentCount = 0
+
     public init() {}
 
     /// 唯一对外渲染入口(CONTRACT §C2)。把一条 Reminder 映射到刘海浮层。
     public func present(_ r: Reminder, onAction: ((SitAction) -> Void)?) {
+        presentCount += 1
         switch r {
         case let .sit(minutes, project):
             presentStrong(
@@ -51,10 +55,8 @@ public final class NotchPresenter {
         showSnooze: Bool,
         onAction: ((SitAction) -> Void)?
     ) {
-        // 先收起上一条强提醒(若有), 避免叠放。
-        if let old = strongNotch {
-            Task { @MainActor in await old.hide() }
-        }
+        // 先收起上一条强提醒(若有), 避免叠放。序列化 hide→expand, 防止两个动画重叠。
+        let old = strongNotch
         let notch = DynamicNotch {
             StrongReminderView(
                 title: title,
@@ -71,7 +73,10 @@ public final class NotchPresenter {
             )
         }
         strongNotch = notch
-        Task { @MainActor in await notch.expand() }
+        Task { @MainActor in
+            if let old { await old.hide() }
+            await notch.expand()
+        }
     }
 
     private func dismissStrong() {

@@ -19,12 +19,14 @@ final class AppControllerReplayTests: XCTestCase {
 
     func testFlushPendingClearsWhenNotFullscreen() {
         var fullscreen = true
-        let controller = AppController(presenter: NotchPresenter(), dnd: { fullscreen })
+        let presenter = NotchPresenter()
+        let controller = AppController(presenter: presenter, dnd: { fullscreen })
         controller.route([.water, .eye])   // 全屏 → 入队
         XCTAssertEqual(controller.pending.count, 2)
         fullscreen = false
         controller.flushPending()           // 结束 → 补放并清空
         XCTAssertTrue(controller.pending.isEmpty)
+        XCTAssertEqual(presenter.presentCount, 2, "flushPending should re-present all queued reminders")
     }
 
     func testFlushPendingKeepsWhenStillFullscreen() {

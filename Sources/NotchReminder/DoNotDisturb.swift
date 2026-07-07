@@ -28,11 +28,15 @@ public enum DoNotDisturb {
             return false
         }
         // 收集所有屏的 CGDisplayBounds(全局坐标, 原点左上)。
-        let screenFrames: [CGRect] = NSScreen.screens.compactMap { screen in
-            guard let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
-                return nil
+        // NSScreen.screens 是 @MainActor-isolated AppKit 属性; 该函数始终由 tick() 在主 actor 上调用,
+        // 因此 assumeIsolated 在运行时是安全的，避免 Swift strict-concurrency 诊断。
+        let screenFrames: [CGRect] = MainActor.assumeIsolated {
+            NSScreen.screens.compactMap { screen in
+                guard let num = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+                    return nil
+                }
+                return CGDisplayBounds(CGDirectDisplayID(num.uint32Value))
             }
-            return CGDisplayBounds(CGDirectDisplayID(num.uint32Value))
         }
         guard !screenFrames.isEmpty else { return false }
 
