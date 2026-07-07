@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "NotchReminder",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v14)
     ],
     dependencies: [
         .package(url: "https://github.com/MrKai77/DynamicNotchKit", from: "1.1.0")
