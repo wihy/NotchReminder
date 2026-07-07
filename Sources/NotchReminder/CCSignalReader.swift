@@ -42,6 +42,7 @@ public struct CCSignalReader {
         guard let data = try? Data(contentsOf: path) else { return nil }
         guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else { return nil }
         let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
         let lastEvent = payload.lastEvent.flatMap { iso.date(from: $0) }
         return CCSignal(ccActive: payload.ccActive, project: payload.project, lastEvent: lastEvent)
     }

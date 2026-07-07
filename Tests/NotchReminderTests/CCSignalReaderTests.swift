@@ -29,7 +29,10 @@ final class CCSignalReaderTests: XCTestCase {
         XCTAssertEqual(signal?.ccActive, true)
         XCTAssertEqual(signal?.project, "SoulApp")
         // last_event 应解析为具体时刻(2026-07-07T15:34:50+08:00)
-        let expected = ISO8601DateFormatter().date(from: "2026-07-07T15:34:50+08:00")
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+        let expected = iso.date(from: "2026-07-07T15:34:50+08:00")
+        XCTAssertNotNil(expected, "formatter must parse the +08:00 offset")
         XCTAssertEqual(signal?.lastEvent, expected)
     }
 
