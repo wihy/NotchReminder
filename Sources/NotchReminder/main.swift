@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mbc.attach()
         menuBarController = mbc
         FirstRunGuide.presentIfNeeded(store: settingsStore)
-        presenter.attachPet()
+        presenter.attachPet(pauseOnBattery: settingsStore.petPauseOnBattery)
         presenter.setPetEnabled(settingsStore.petEnabled)
         c.start()
     }

@@ -21,6 +21,10 @@ struct SettingsView: View {
     // 偏好
     @State private var launchAtLogin: Bool
     @State private var strongStyleStaysLonger: Bool
+    // 宠物
+    @State private var petEnabled: Bool
+    @State private var petPauseOnBattery: Bool
+    private let petCharacter: String
 
     init(store: SettingsStore) {
         self.store = store
@@ -35,6 +39,9 @@ struct SettingsView: View {
         _nightEnabled = State(initialValue: cfg.nightEnabled)
         _launchAtLogin = State(initialValue: store.launchAtLogin)
         _strongStyleStaysLonger = State(initialValue: store.strongStyleStaysLonger)
+        _petEnabled = State(initialValue: store.petEnabled)
+        _petPauseOnBattery = State(initialValue: store.petPauseOnBattery)
+        petCharacter = store.petCharacter
     }
 
     var body: some View {
@@ -50,6 +57,22 @@ struct SettingsView: View {
                 Toggle("喝水", isOn: $waterEnabled).onChange(of: waterEnabled) { _, _ in persist() }
                 Toggle("护眼远眺", isOn: $eyeEnabled).onChange(of: eyeEnabled) { _, _ in persist() }
                 Toggle("熬夜劝退", isOn: $nightEnabled).onChange(of: nightEnabled) { _, _ in persist() }
+            }
+            Section("宠物") {
+                Toggle("启用刘海宠物", isOn: $petEnabled).onChange(of: petEnabled) { _, on in
+                    store.petEnabled = on
+                    AppController.shared.presenterSetPetEnabled(on)
+                }
+                Toggle("电池模式静止(省电)", isOn: $petPauseOnBattery).onChange(of: petPauseOnBattery) { _, on in
+                    store.petPauseOnBattery = on
+                }
+                HStack {
+                    Text("形象")
+                    Spacer()
+                    Text(verbatim: petCharacter).foregroundStyle(.secondary)
+                }
+                Text("(电池模式静止需重启生效)")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("通用") {
                 Toggle("开机自启", isOn: $launchAtLogin)

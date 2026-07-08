@@ -82,4 +82,21 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.launchAtLogin)
         XCTAssertTrue(reloaded.strongStyleStaysLonger)
     }
+
+    func testPetPrefsRoundTrip() {
+        let store = SettingsStore(defaults: defaults)
+        // petEnabled 默认 true(首次无存值); petPauseOnBattery 默认 false; petCharacter 默认 "blob"
+        XCTAssertTrue(store.petEnabled)
+        XCTAssertFalse(store.petPauseOnBattery)
+        XCTAssertEqual(store.petCharacter, "blob")
+
+        store.petEnabled = false
+        store.petPauseOnBattery = true
+        store.petCharacter = "cat"
+
+        let reloaded = SettingsStore(defaults: defaults)
+        XCTAssertFalse(reloaded.petEnabled)
+        XCTAssertTrue(reloaded.petPauseOnBattery)
+        XCTAssertEqual(reloaded.petCharacter, "cat")
+    }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import DynamicNotchKit
 import ReminderCore
+import IOKit.ps
 
 /// 强样式浮层上「起身5分钟」/「知道了」两个按钮对应的动作(CONTRACT §C2)。
 public enum SitAction: Equatable {
@@ -33,7 +34,8 @@ public final class NotchPresenter {
     // MARK: - 启动接线(由 AppDelegate 调)
 
     /// 建长存 notch + 注册灭屏观察; 据 petVM.showsPet 决定初始 compact 还是 hide。
-    public func attachPet() {
+    /// pauseOnBattery=true 且当前是电池供电 → hide 而非 compact(v1 启动时读一次, 重启生效)。
+    public func attachPet(pauseOnBattery: Bool = false) {
         let vm = petVM
         let payload = self.payload
         let n = DynamicNotch(
@@ -47,9 +49,23 @@ public final class NotchPresenter {
         notch = n
         powerObserver = ScreenPowerObserver(vm: petVM)
         powerObserver?.start()
+        let shouldHideForBattery = pauseOnBattery && isOnBattery
         Task { @MainActor in
-            if petVM.showsPet { await n.compact() } else { await n.hide() }
+            if petVM.showsPet && !shouldHideForBattery {
+                await n.compact()
+            } else {
+                await n.hide()
+            }
         }
+    }
+
+    /// 当前是否电池供电(非 AC 接入)。读一次, v1 不监听运行时电源切换。
+    /// IOKit 读失败或无电源信息时安全降级为 false(不因电源判定隐藏宠物)。
+    private var isOnBattery: Bool {
+        guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else { return false }
+        guard let list = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as Array? else { return false }
+        guard let desc = list.first as? [String: Any] else { return false }
+        return (desc[kIOPSPowerSourceStateKey] as? String) != kIOPSACPowerValue
     }
 
     /// Task 5 设置窗调: 开/关宠物。on→compact(宠物可见), off→hide(彻底收起)。

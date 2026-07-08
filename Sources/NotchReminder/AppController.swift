@@ -125,4 +125,9 @@ public final class AppController {
         cfg.mutedUntil = clock().addingTimeInterval(seconds)
         applyConfig(cfg)
     }
+
+    /// Task 5 设置窗调: 转发宠物开关到 presenter(不暴露 presenter 私有性)。
+    public func presenterSetPetEnabled(_ on: Bool) {
+        presenter.setPetEnabled(on)
+    }
 }

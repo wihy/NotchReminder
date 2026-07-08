@@ -28,6 +28,9 @@ final class SettingsStore {
         static let launchAtLogin = "launchAtLogin"
         static let strongStyleStaysLonger = "strongStyleStaysLonger"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
+        static let petEnabled = "petEnabled"
+        static let petPauseOnBattery = "petPauseOnBattery"
+        static let petCharacter = "petCharacter"
     }
 
     // MARK: - Config round-trip
@@ -83,10 +86,22 @@ final class SettingsStore {
         set { defaults.set(newValue, forKey: Key.hasCompletedFirstRun) }
     }
 
-    /// 宠物开关(临时: Task 5 正式分组持久化, 此属性可被替换/收编)。
+    /// 宠物总开关(默认 true: 首次无存值视为开启)。
     var petEnabled: Bool {
-        get { defaults.object(forKey: "petEnabled") == nil ? true : defaults.bool(forKey: "petEnabled") }
-        set { defaults.set(newValue, forKey: "petEnabled") }
+        get { defaults.object(forKey: Key.petEnabled) == nil ? true : defaults.bool(forKey: Key.petEnabled) }
+        set { defaults.set(newValue, forKey: Key.petEnabled) }
+    }
+
+    /// 电池模式静止(省电): v1 启动时读一次决定是否常驻, 重启生效。
+    var petPauseOnBattery: Bool {
+        get { defaults.bool(forKey: Key.petPauseOnBattery) }
+        set { defaults.set(newValue, forKey: Key.petPauseOnBattery) }
+    }
+
+    /// 宠物形象(v1 仅 "blob", 占位只读)。
+    var petCharacter: String {
+        get { defaults.string(forKey: Key.petCharacter) ?? "blob" }
+        set { defaults.set(newValue, forKey: Key.petCharacter) }
     }
 
     // MARK: - Helpers
