@@ -18,10 +18,9 @@ enum LaunchAgent {
     /// 当前登录用户的图形域, e.g. "gui/501"。
     private static var guiDomain: String { "gui/\(getuid())" }
 
-    /// 当前运行的可执行绝对路径(自启应指向"当前这个二进制")。回落到 release 产物路径。
+    /// 当前运行的可执行绝对路径(自启应指向"当前这个二进制")。
     static var currentExecPath: String {
-        Bundle.main.executablePath
-            ?? "/Users/chunhaixu/NotchReminder/.build/release/NotchReminder"
+        Bundle.main.executablePath ?? CommandLine.arguments[0]
     }
 
     /// 是否已装: plist 文件存在 且 launchctl print 命中该 label。

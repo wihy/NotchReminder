@@ -4,8 +4,16 @@ import AppKit
 enum FirstRunGuide {
 
     /// CC 插件一键安装命令(与 Task 8 install.sh 一致)。
-    static let ccInstallCommand =
-        "bash /Users/chunhaixu/NotchReminder/install.sh"
+    static var ccInstallCommand: String {
+        // Derive repo root from executable: <repoRoot>/.build/release/NotchReminder
+        let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        let repoRoot = execURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .path
+        return "bash \(repoRoot)/install.sh"
+    }
 
     @MainActor
     static func presentIfNeeded(store: SettingsStore) {

@@ -3,6 +3,7 @@ import AppKit
 import ReminderCore
 
 /// 设置窗内容: 四类阈值 Slider(分钟) + 四开关 + 开机自启 + 样式偏好。改动即存即生效。
+@MainActor
 struct SettingsView: View {
 
     let store: SettingsStore
