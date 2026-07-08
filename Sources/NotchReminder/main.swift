@@ -21,8 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mbc.attach()
         menuBarController = mbc
         FirstRunGuide.presentIfNeeded(store: settingsStore)
-        presenter.attachPet(pauseOnBattery: settingsStore.petPauseOnBattery)
+        // I1 修复: 先把 petEnabled 落到 vm(showsPet), 再 attachPet 统一按 showsPet + pauseOnBattery
+        // 决策初始态。不再在 attachPet 之后独立 setPetEnabled(会无条件 compact, 覆盖电池静止)。
         presenter.setPetEnabled(settingsStore.petEnabled)
+        presenter.attachPet(pauseOnBattery: settingsStore.petPauseOnBattery)
         c.start()
     }
 }

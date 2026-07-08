@@ -114,30 +114,38 @@ struct PetCompactView: View {
 
 // MARK: - expanded(提醒卡)
 
-/// 强提醒运行时文案/按钮 holder。长存 notch 的 expanded 视图在 attachPet 时建一次,
-/// 其后 sit/night 的 title/subtitle 是运行时来的, 故由 presenter 先 payload.set(...) 再
-/// await notch.expand(); 视图 @ObservedObject payload → set 触发重绘显示最新文案。
+/// 提醒卡运行时内容 holder。长存 notch 的 expanded 视图在 attachPet 时建一次,
+/// 其后每条提醒的文案/按钮是运行时来的, 故由 presenter 先 payload.set(...) 再
+/// await notch.expand(); 视图 @ObservedObject payload → set 触发重绘显示最新内容。
+///
+/// 四种提醒统一走此卡, 由 showSnooze/showDismiss 显式控制按钮:
+/// - sit:   showSnooze=true,  showDismiss=true  (起身5分钟 + 知道了)
+/// - night: showSnooze=false, showDismiss=true  (知道了)
+/// - water/eye(轻样式): showSnooze=false, showDismiss=false (无按钮, auto-hide)
 @MainActor
 final class StrongPayload: ObservableObject {
     @Published var title: String = ""
     @Published var subtitle: String = ""
     @Published var showSnooze: Bool = false
+    @Published var showDismiss: Bool = false
     var onSnooze: (() -> Void)?
     var onDismiss: (() -> Void)?
 
-    func set(title: String, subtitle: String, showSnooze: Bool,
-             onSnooze: @escaping () -> Void, onDismiss: @escaping () -> Void) {
+    func set(title: String, subtitle: String, showSnooze: Bool, showDismiss: Bool,
+             onSnooze: (() -> Void)?, onDismiss: (() -> Void)?) {
         self.title = title
         self.subtitle = subtitle
         self.showSnooze = showSnooze
+        self.showDismiss = showDismiss
         self.onSnooze = onSnooze
         self.onDismiss = onDismiss
     }
 }
 
-/// 提醒卡: 大团子(演出) + 文案 + [sit/night 带按钮]。取代旧 StrongReminderView。
+/// 提醒卡: 大团子(演出) + 文案 + [按钮显式控制]。取代旧 StrongReminderView。
 /// 文案/按钮经 payload(StrongPayload) 注入: 长存 notch 的 expanded 闭包捕获 payload,
 /// presenter 在 expand 前 payload.set(...), @Published 变化触发视图重绘。
+/// 按钮由 payload.showSnooze/showDismiss 分别控制——轻样式(water/eye)两者皆 false 时无按钮区。
 struct PetExpandedView: View {
     @ObservedObject var vm: PetViewModel
     @ObservedObject var payload: StrongPayload
@@ -150,11 +158,15 @@ struct PetExpandedView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(verbatim: payload.title).font(.headline).foregroundStyle(.primary)
                 Text(verbatim: payload.subtitle).font(.subheadline).foregroundStyle(.secondary)
-                HStack(spacing: 10) {
-                    if payload.showSnooze {
-                        Button(action: { payload.onSnooze?() }) { Text(verbatim: "起身5分钟") }.buttonStyle(.borderedProminent)
+                if payload.showSnooze || payload.showDismiss {
+                    HStack(spacing: 10) {
+                        if payload.showSnooze {
+                            Button(action: { payload.onSnooze?() }) { Text(verbatim: "起身5分钟") }.buttonStyle(.borderedProminent)
+                        }
+                        if payload.showDismiss {
+                            Button(action: { payload.onDismiss?() }) { Text(verbatim: "知道了") }.buttonStyle(.bordered)
+                        }
                     }
-                    Button(action: { payload.onDismiss?() }) { Text(verbatim: "知道了") }.buttonStyle(.bordered)
                 }
             }
         }
