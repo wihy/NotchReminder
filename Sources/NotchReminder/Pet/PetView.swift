@@ -134,11 +134,11 @@ struct PetExpandedView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(verbatim: title).font(.headline).foregroundStyle(.primary)
                 Text(verbatim: subtitle).font(.subheadline).foregroundStyle(.secondary)
-                if showSnooze {
-                    HStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    if showSnooze {
                         Button(action: onSnooze) { Text(verbatim: "起身5分钟") }.buttonStyle(.borderedProminent)
-                        Button(action: onDismiss) { Text(verbatim: "知道了") }.buttonStyle(.bordered)
                     }
+                    Button(action: onDismiss) { Text(verbatim: "知道了") }.buttonStyle(.bordered)
                 }
             }
         }
