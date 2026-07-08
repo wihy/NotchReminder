@@ -3,3 +3,6 @@
 DerivedData/
 *.xcuserstate
 .notchreminder/
+.superpowers/
+__pycache__/
+*.pyc
