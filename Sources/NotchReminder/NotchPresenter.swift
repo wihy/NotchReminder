@@ -15,7 +15,9 @@ public final class NotchPresenter {
     private let autoHideSeconds: TimeInterval = 4
 
     /// 当前强样式浮层实例。持有引用以便按钮回调里 hide, 以及被下一条强提醒替换时先收起旧的。
-    private var strongNotch: DynamicNotch<StrongReminderView, EmptyView, EmptyView>?
+    private var strongNotch: DynamicNotch<PetExpandedView, EmptyView, EmptyView>?
+
+    let petVM = PetViewModel()   // Task 3 临时用于 PetExpandedView; Task 4 升级为长存 notch 的共享 vm
 
     /// 测试钩: present(_:onAction:) 被调用的累计次数(含无头测试环境)。内部可见, 供 @testable 测试断言。
     private(set) var presentCount = 0
@@ -58,7 +60,9 @@ public final class NotchPresenter {
         // 先收起上一条强提醒(若有), 避免叠放。序列化 hide→expand, 防止两个动画重叠。
         let old = strongNotch
         let notch = DynamicNotch {
-            StrongReminderView(
+            PetExpandedView(
+                vm: self.petVM,
+                showsPet: true,
                 title: title,
                 subtitle: subtitle,
                 showSnooze: showSnooze,
