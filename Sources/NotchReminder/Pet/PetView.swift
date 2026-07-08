@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ReminderCore
 
 // MARK: - 团子主体 Shape
@@ -12,6 +13,11 @@ import ReminderCore
 /// - >1 拉长(精神/伸懒腰): 更窄更高
 struct BlobShape: Shape {
     var squash: CGFloat
+    /// 让 squash 变化可被 spring/easeInOut 插值(否则形变是瞬变, 没有 Q 弹感)。
+    var animatableData: CGFloat {
+        get { squash }
+        set { squash = newValue }
+    }
     func path(in rect: CGRect) -> Path {
         let w = rect.width / squash   // squash<1 → 更宽(压扁)
         let h = rect.height * squash  // squash<1 → 更矮(压扁)
@@ -38,6 +44,20 @@ struct PetBlob: View {
         case .exhausted: return Color(red: 0.78, green: 0.72, blue: 0.82)
         case .sleepy:    return Color(red: 0.66, green: 0.62, blue: 0.82)
         case .dozing:    return Color(red: 0.72, green: 0.70, blue: 0.80)
+        }
+    }
+    /// 体积感渐变: 顶部提亮、底部加深(静态, 不产生持续动画开销)。
+    private var bodyGradient: LinearGradient {
+        LinearGradient(
+            colors: [color.lighter(0.16), color, color.darker(0.12)],
+            startPoint: .top, endPoint: .bottom)
+    }
+    /// fresh/calm 时的腮红透明度(精神时脸红扑扑, 累了褪去)。
+    private var blushOpacity: Double {
+        switch mood {
+        case .fresh: return 0.55
+        case .calm:  return 0.32
+        default:     return 0
         }
     }
     private var squash: CGFloat {
@@ -93,9 +113,28 @@ struct PetBlob: View {
 
     var body: some View {
         ZStack {
+            // 团子主体: 渐变填充(体积感) + 左上高光点(果冻质感)。
             BlobShape(squash: squash)
-                .fill(color)
+                .fill(bodyGradient)
                 .frame(width: size, height: size)
+                .overlay(
+                    Ellipse()
+                        .fill(Color.white.opacity(0.5))
+                        .frame(width: size * 0.26, height: size * 0.18)
+                        .blur(radius: size * 0.02)
+                        .offset(x: -size * 0.18, y: -size * 0.20)
+                        .allowsHitTesting(false)
+                )
+            // 腮红(fresh/calm 时脸红扑扑)
+            if blushOpacity > 0 {
+                HStack(spacing: size * 0.42) {
+                    Circle().fill(Color(red: 1, green: 0.5, blue: 0.55).opacity(blushOpacity))
+                        .frame(width: size * 0.14, height: size * 0.14).blur(radius: size * 0.02)
+                    Circle().fill(Color(red: 1, green: 0.5, blue: 0.55).opacity(blushOpacity))
+                        .frame(width: size * 0.14, height: size * 0.14).blur(radius: size * 0.02)
+                }
+                .offset(y: size * 0.02)
+            }
             // 两眼(远眺时随 gaze 横移)
             HStack(spacing: size * 0.18) {
                 eye(open: eyeOpen)
@@ -121,6 +160,8 @@ struct PetBlob: View {
         }
         .scaleEffect(x: 1, y: actScaleY, anchor: .bottom)
         .rotationEffect(swayAngle)
+        // 形变(squash)/rua 用弹簧插值 → 状态切换时 Q 弹一下, 不是瞬变。
+        .animation(.spring(response: 0.42, dampingFraction: 0.55), value: squash)
         .frame(width: size*1.4, height: size*1.4)
         .onReceive(blinkTimer) { _ in
             guard isAwake, act == nil else { return }
@@ -158,8 +199,39 @@ struct PetBlob: View {
     }
 
     private func eye(open: CGFloat) -> some View {
-        Capsule().fill(Color.black.opacity(0.8))
-            .frame(width: size*0.07, height: size*0.12 * max(0.05, open))
+        let h = size * 0.14 * max(0.05, open)
+        return Capsule().fill(Color(red: 0.15, green: 0.15, blue: 0.22))
+            .frame(width: size * 0.085, height: h)
+            .overlay(
+                // 眼神光: 睁眼时右上角一点高光, 眨眼/闭眼时隐去。
+                Circle().fill(Color.white.opacity(0.9))
+                    .frame(width: size * 0.032, height: size * 0.032)
+                    .offset(x: size * 0.018, y: -h * 0.22)
+                    .opacity(open > 0.5 ? 1 : 0)
+                    .allowsHitTesting(false)
+            )
+    }
+}
+
+// MARK: - 颜色明暗辅助
+
+private extension Color {
+    /// 提亮(向白靠拢 amount∈0...1)。用于团子渐变顶部高光。
+    func lighter(_ amount: CGFloat) -> Color {
+        blend(with: .white, amount: amount)
+    }
+    /// 加深(向黑靠拢)。用于团子渐变底部。
+    func darker(_ amount: CGFloat) -> Color {
+        blend(with: .black, amount: amount)
+    }
+    private func blend(with other: Color, amount: CGFloat) -> Color {
+        let a = max(0, min(1, amount))
+        let c1 = NSColor(self).usingColorSpace(.deviceRGB) ?? NSColor.gray
+        let c2 = NSColor(other).usingColorSpace(.deviceRGB) ?? NSColor.white
+        return Color(
+            red:   Double(c1.redComponent   * (1 - a) + c2.redComponent   * a),
+            green: Double(c1.greenComponent * (1 - a) + c2.greenComponent * a),
+            blue:  Double(c1.blueComponent  * (1 - a) + c2.blueComponent  * a))
     }
 }
 
@@ -176,8 +248,8 @@ struct PetCompactView: View {
         Group {
             if vm.showsPet {
                 PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: vm.isPetting, size: 22)
-                    .scaleEffect(vm.isAwake && vm.act == nil ? (breathe ? 1.05 : 0.95) : 1)
-                    .animation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true), value: breathe)
+                    .scaleEffect(vm.isAwake && vm.act == nil ? (breathe ? 1.08 : 0.93) : 1)
+                    .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: breathe)
                     .onAppear {
                         if vm.isAwake { breathe.toggle() }
                     }
