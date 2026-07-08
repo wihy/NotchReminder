@@ -6,13 +6,13 @@ import ReminderCore
 final class AppControllerReplayTests: XCTestCase {
 
     func testFullscreenRoutesToPending() {
-        let controller = AppController(presenter: NotchPresenter(), dnd: { true })
+        let controller = AppController(presenter: NotchPresenter(), dnd: { true }, ccProvider: { nil })
         controller.route([.water, .eye])
         XCTAssertEqual(controller.pending, [.water, .eye])
     }
 
     func testNonFullscreenDoesNotQueue() {
-        let controller = AppController(presenter: NotchPresenter(), dnd: { false })
+        let controller = AppController(presenter: NotchPresenter(), dnd: { false }, ccProvider: { nil })
         controller.route([.water])
         XCTAssertTrue(controller.pending.isEmpty)
     }
@@ -20,7 +20,7 @@ final class AppControllerReplayTests: XCTestCase {
     func testFlushPendingClearsWhenNotFullscreen() {
         var fullscreen = true
         let presenter = NotchPresenter()
-        let controller = AppController(presenter: presenter, dnd: { fullscreen })
+        let controller = AppController(presenter: presenter, dnd: { fullscreen }, ccProvider: { nil })
         controller.route([.water, .eye])   // 全屏 → 入队
         XCTAssertEqual(controller.pending.count, 2)
         fullscreen = false
@@ -30,7 +30,7 @@ final class AppControllerReplayTests: XCTestCase {
     }
 
     func testFlushPendingKeepsWhenStillFullscreen() {
-        let controller = AppController(presenter: NotchPresenter(), dnd: { true })
+        let controller = AppController(presenter: NotchPresenter(), dnd: { true }, ccProvider: { nil })
         controller.route([.water])          // 全屏 → 入队
         controller.flushPending()           // 仍全屏 → 保留
         XCTAssertEqual(controller.pending, [.water])

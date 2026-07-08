@@ -22,7 +22,8 @@ final class AppControllerTests: XCTestCase {
             presenter: NotchPresenter(),
             config: cfg,
             idleProvider: { 0 },        // 一直有输入 → active
-            clock: { fakeNow }
+            clock: { fakeNow },
+            ccProvider: { nil }         // 隔离: 不读真实 cc.json
         )
         var fired = false
         _ = controller.tick()          // 第 1 次 tick: 首采样 dt=0 不累加
@@ -47,7 +48,8 @@ final class AppControllerTests: XCTestCase {
             presenter: NotchPresenter(),
             config: cfg,
             idleProvider: { idle },
-            clock: { fakeNow }
+            clock: { fakeNow },
+            ccProvider: { nil }         // 隔离: 不读真实 cc.json
         )
         _ = controller.tick()           // 首采样
         for _ in 0..<4 {                // 累积 40s(< 60s)

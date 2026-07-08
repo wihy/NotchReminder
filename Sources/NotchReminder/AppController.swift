@@ -19,7 +19,9 @@ public final class AppController {
     private let idleProvider: () -> Double
     private let clock: () -> Date
     private let isFullscreen: FullscreenProbe
-    private let ccReader = CCSignalReader()
+    /// CC 信号读取。默认读真实 ~/.notchreminder/cc.json; 可注入以隔离测试
+    /// (否则单测会依赖真实文件, 其 last_event 与测试固定时间戳的相对关系会毒化 rest/byCC 判定)。
+    private let ccProvider: () -> CCSignal?
     private var timer: Timer?
 
     /// 全屏期间被挡下的提醒, 按到达顺序排队, 免打扰结束后补放。
@@ -33,13 +35,15 @@ public final class AppController {
         config: ReminderConfig = ReminderConfig(),
         idleProvider: @escaping () -> Double = ActivityMonitor.currentIdleSeconds,
         clock: @escaping () -> Date = { Date() },
-        dnd: @escaping FullscreenProbe = DoNotDisturb.isFullscreenActive
+        dnd: @escaping FullscreenProbe = DoNotDisturb.isFullscreenActive,
+        ccProvider: @escaping () -> CCSignal? = { CCSignalReader().read() }
     ) {
         self.presenter = presenter
         self._config = config
         self.idleProvider = idleProvider
         self.clock = clock
         self.isFullscreen = dnd
+        self.ccProvider = ccProvider
     }
 
     // MARK: - 只读面(CONTRACT §C3c)
@@ -63,7 +67,7 @@ public final class AppController {
     @discardableResult
     public func tick() -> [Reminder] {
         flushPending()
-        let cc = ccReader.read()
+        let cc = ccProvider()
         let sample = Sample(
             now: clock(),
             idleSeconds: idleProvider(),
