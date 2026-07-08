@@ -1,0 +1,26 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "notchreminder",
+  "owner": {
+    "name": "chunhaixu",
+    "email": "chunhaiyoung@foxmail.com"
+  },
+  "metadata": {
+    "description": "NotchReminder 健康提醒工具的 CC 传感器插件本地 marketplace",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "notchreminder",
+      "source": "./",
+      "description": "把 Claude Code 活跃信号写入 ~/.notchreminder/cc.json, 给 NotchReminder App 的久坐/熬夜提醒补活跃与项目名",
+      "version": "1.0.0",
+      "author": {
+        "name": "chunhaixu",
+        "email": "chunhaiyoung@foxmail.com"
+      },
+      "keywords": ["health", "notch", "reminder", "hooks"],
+      "category": "workflow"
+    }
+  ]
+}
