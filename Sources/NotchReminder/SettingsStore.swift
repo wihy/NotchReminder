@@ -83,6 +83,12 @@ final class SettingsStore {
         set { defaults.set(newValue, forKey: Key.hasCompletedFirstRun) }
     }
 
+    /// 宠物开关(临时: Task 5 正式分组持久化, 此属性可被替换/收编)。
+    var petEnabled: Bool {
+        get { defaults.object(forKey: "petEnabled") == nil ? true : defaults.bool(forKey: "petEnabled") }
+        set { defaults.set(newValue, forKey: "petEnabled") }
+    }
+
     // MARK: - Helpers
 
     private func double(_ key: String, fallback: TimeInterval) -> TimeInterval {

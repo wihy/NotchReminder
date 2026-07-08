@@ -73,6 +73,7 @@ public final class AppController {
         )
         let (newState, reminders) = ReminderEngine.advance(_state, config: _config, sample: sample)
         _state = newState
+        presenter.setPetMood(petMood(state: _state, config: _config, now: sample.now))
         route(reminders)
         return reminders
     }

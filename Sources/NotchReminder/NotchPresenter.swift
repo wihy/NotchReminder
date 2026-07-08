@@ -8,99 +8,123 @@ public enum SitAction: Equatable {
     case dismiss  // 知道了: 仅收起
 }
 
-/// 封装 DynamicNotchKit 的强/轻样式渲染。整类 @MainActor: 库的展开/收起方法均 @MainActor 隔离(经协议)。
+/// 封装 DynamicNotchKit 的渲染。Task 4: 从「每条提醒新建临时 notch」重构为
+/// **单一长存 DynamicNotch**——compactLeading = 宠物团子(平时呼吸), expanded = 提醒卡(PetExpandedView)。
+/// 启动后 attachPet() 建一次 notch + 注冊灭屏观察; 平时 compact, 提醒 expand, 演完回 compact(不消失)。
+/// petEnabled=false 时用 hide(而非 compact)降级(宠物不可见)。整类 @MainActor。
 @MainActor
 public final class NotchPresenter {
     /// 轻样式停留时长(秒)。expand() 自身另含 ~0.4s 动画等待, 此为额外停留。
     private let autoHideSeconds: TimeInterval = 4
 
-    /// 当前强样式浮层实例。持有引用以便按钮回调里 hide, 以及被下一条强提醒替换时先收起旧的。
-    private var strongNotch: DynamicNotch<PetExpandedView, EmptyView, EmptyView>?
-
-    let petVM = PetViewModel()   // Task 3 临时用于 PetExpandedView; Task 4 升级为长存 notch 的共享 vm
-
     /// 测试钩: present(_:onAction:) 被调用的累计次数(含无头测试环境)。内部可见, 供 @testable 测试断言。
     private(set) var presentCount = 0
 
+    /// 长存 notch: compactLeading=宠物, expanded=提醒卡(PetExpandedView)。启动后建一次。
+    private var notch: DynamicNotch<PetExpandedView, PetCompactView, EmptyView>?
+    /// 共享宠物状态机(长存 notch 的 compact/expanded 视图 + 灭屏观察 共用同一实例)。
+    private let petVM = PetViewModel()
+    /// 强提醒运行时文案/按钮 holder(长存 notch 的 expanded 闭包捕获; sit/night expand 前 set)。
+    private let payload = StrongPayload()
+    private var powerObserver: ScreenPowerObserver?
+    private var petEnabled: Bool = true
+
     public init() {}
 
-    /// 唯一对外渲染入口(CONTRACT §C2)。把一条 Reminder 映射到刘海浮层。
-    public func present(_ r: Reminder, onAction: ((SitAction) -> Void)?) {
-        presentCount += 1
-        switch r {
-        case let .sit(minutes, project):
-            presentStrong(
-                title: sitTitle(minutes: minutes, project: project),
-                subtitle: "起来走两步, 眼睛也歇歇",
-                showSnooze: true,
-                onAction: onAction
-            )
-        case let .night(clock):
-            presentStrong(
-                title: "\(clock) 了",
-                subtitle: "明天的你会感谢现在睡觉的你",
-                showSnooze: false,
-                onAction: onAction
-            )
-        case .water:
-            presentLight(systemName: "drop.fill", color: .blue, title: "喝口水", description: "补个水, 顺手站一下")
-        case .eye:
-            presentLight(systemName: "eye.fill", color: .green, title: "远眺 20 秒", description: "看向 6 米外, 放松睫状肌")
+    // MARK: - 启动接线(由 AppDelegate 调)
+
+    /// 建长存 notch + 注册灭屏观察; 据 petEnabled 决定初始 compact 还是 hide。
+    public func attachPet() {
+        let vm = petVM
+        let payload = self.payload
+        let n = DynamicNotch(
+            expanded: {
+                PetExpandedView(vm: vm, showsPet: self.petEnabled, payload: payload)
+            },
+            compactLeading: {
+                PetCompactView(vm: vm, showsPet: self.petEnabled)
+            }
+        )
+        notch = n
+        powerObserver = ScreenPowerObserver(vm: petVM)
+        powerObserver?.start()
+        Task { @MainActor in
+            if petEnabled { await n.compact() } else { await n.hide() }
         }
     }
 
-    // MARK: - 强样式
+    /// Task 5 设置窗调: 开/关宠物。on→compact(宠物可见), off→hide(彻底收起)。
+    public func setPetEnabled(_ on: Bool) {
+        petEnabled = on
+        Task { @MainActor in
+            guard let n = notch else { return }
+            if on { await n.compact() } else { await n.hide() }
+        }
+    }
 
-    private func presentStrong(
+    /// AppController 每 tick 推当前宠物心情(由 petMood() 映射引擎状态)。
+    public func setPetMood(_ m: PetMood) { petVM.setMood(m) }
+
+    // MARK: - 提醒入口(签名与 v1 一致, AppController 调用点不变)
+
+    public func present(_ r: Reminder, onAction: ((SitAction) -> Void)?) {
+        presentCount += 1
+        guard let n = notch else { return }
+        petVM.playAct(actFor(r))
+        switch r {
+        case let .sit(minutes, project):
+            expandStrong(
+                title: sitTitle(minutes: minutes, project: project),
+                subtitle: "起来走两步, 眼睛也歇歇",
+                showSnooze: true, onAction: onAction, n: n
+            )
+        case let .night(clock):
+            expandStrong(
+                title: "\(clock) 了",
+                subtitle: "明天的你会感谢现在睡觉的你",
+                showSnooze: false, onAction: onAction, n: n
+            )
+        case .water, .eye:
+            // 轻样式: expand → 停留 → clearAct → 回 compact(宠物不消失)。
+            // 无按钮 → 不碰 payload(其内容为上次 sit/night 残留, 但轻样式不走 PetExpandedView 的按钮/文案路径,
+            // 因 expand 显示的是同一 PetExpandedView, 故这里也清一下 payload 以免显示旧文案)。
+            payload.set(title: "", subtitle: "", showSnooze: false, onSnooze: {}, onDismiss: {})
+            Task { @MainActor in
+                await n.expand()
+                try? await Task.sleep(for: .seconds(autoHideSeconds))
+                petVM.clearAct()
+                if petEnabled { await n.compact() } else { await n.hide() }
+            }
+        }
+    }
+
+    // MARK: - 强样式(sit / night)
+
+    /// 强提醒: 先把本次 title/subtitle/按钮动作塞进 payload(长存 notch 的 expanded 视图捕获该 payload),
+    /// @Published 变化触发重绘, 再 await expand() 显示。按钮点击经 payload.onSnooze/onDismiss 回调,
+    /// 回调内推进 onAction + afterStrong(清演出 + 回 compact)。
+    private func expandStrong(
         title: String,
         subtitle: String,
         showSnooze: Bool,
-        onAction: ((SitAction) -> Void)?
+        onAction: ((SitAction) -> Void)?,
+        n: DynamicNotch<PetExpandedView, PetCompactView, EmptyView>
     ) {
-        // 先收起上一条强提醒(若有), 避免叠放。序列化 hide→expand, 防止两个动画重叠。
-        let old = strongNotch
-        let notch = DynamicNotch {
-            PetExpandedView(
-                vm: self.petVM,
-                showsPet: true,
-                title: title,
-                subtitle: subtitle,
-                showSnooze: showSnooze,
-                onSnooze: { [weak self] in
-                    onAction?(.snooze)
-                    self?.dismissStrong()
-                },
-                onDismiss: { [weak self] in
-                    onAction?(.dismiss)
-                    self?.dismissStrong()
-                }
-            )
-        }
-        strongNotch = notch
-        Task { @MainActor in
-            if let old { await old.hide() }
-            await notch.expand()
-        }
-    }
-
-    private func dismissStrong() {
-        guard let notch = strongNotch else { return }
-        strongNotch = nil
-        Task { @MainActor in await notch.hide() }
-    }
-
-    // MARK: - 轻样式
-
-    private func presentLight(systemName: String, color: Color, title: LocalizedStringKey, description: LocalizedStringKey) {
-        let info = DynamicNotchInfo(
-            icon: .init(systemName: systemName, color: color),
+        payload.set(
             title: title,
-            description: description
+            subtitle: subtitle,
+            showSnooze: showSnooze,
+            onSnooze: { onAction?(.snooze); self.afterStrong(n: n) },
+            onDismiss: { onAction?(.dismiss); self.afterStrong(n: n) }
         )
+        Task { @MainActor in await n.expand() }
+    }
+
+    /// 强提醒按钮点击后: 清演出 + 回 compact(或 petEnabled=false 时 hide)。
+    private func afterStrong(n: DynamicNotch<PetExpandedView, PetCompactView, EmptyView>) {
+        petVM.clearAct()
         Task { @MainActor in
-            await info.expand()                                   // 内含 ~0.4s 动画
-            try? await Task.sleep(for: .seconds(autoHideSeconds)) // 额外停留
-            await info.hide()
+            if petEnabled { await n.compact() } else { await n.hide() }
         }
     }
 
