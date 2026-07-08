@@ -27,10 +27,11 @@ echo "==> [3/5] 安装 CC 插件(本地 marketplace: notchreminder)"
 # 先移除同名 marketplace 再加, 保证可重复运行(未安装时忽略报错)
 claude plugin marketplace remove notchreminder >/dev/null 2>&1 || true
 claude plugin marketplace add "$PLUGIN_DIR"
-# 装并启用插件(user scope); 已安装则 install 幂等, 再显式 enable 兜底
-claude plugin install notchreminder@notchreminder --scope user || true
-claude plugin enable notchreminder@notchreminder --scope user || true
-echo "    CC 插件 notchreminder@notchreminder 已安装启用(重启 claude 会话后 hooks 生效)"
+# 装并启用插件(user scope); 幂等: 已安装/已启用时下面命令会返回非零并打印提示,
+# 这属正常(重复运行), 静默吞掉输出避免误报为失败。
+claude plugin install notchreminder@notchreminder --scope user >/dev/null 2>&1 || true
+claude plugin enable  notchreminder@notchreminder --scope user >/dev/null 2>&1 || true
+echo "    CC 插件 notchreminder@notchreminder 已安装并启用(若已装则跳过; 重启 claude 会话后 hooks 生效)"
 
 echo "==> [4/5] 安装开机自启 LaunchAgent"
 mkdir -p "$HOME/Library/LaunchAgents"
