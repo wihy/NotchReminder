@@ -91,14 +91,13 @@ struct PetBlob: View {
 /// 刘海旁的小团子。绑 vm, 平时呼吸 + 偶尔眨眼(由 act/isPetting 覆盖)。showsPet=false → EmptyView。
 struct PetCompactView: View {
     @ObservedObject var vm: PetViewModel
-    var showsPet: Bool
 
     // 呼吸: 缓慢 scale autoreverse(~3.5s)。只在 awake 时动。
     @State private var breathe = false
 
     var body: some View {
         Group {
-            if showsPet {
+            if vm.showsPet {
                 PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: vm.isPetting, size: 22)
                     .scaleEffect(vm.isAwake && vm.act == nil ? (breathe ? 1.05 : 0.95) : 1)
                     .animation(.easeInOut(duration: 3.5).repeatForever(autoreverses: true), value: breathe)
@@ -141,12 +140,11 @@ final class StrongPayload: ObservableObject {
 /// presenter 在 expand 前 payload.set(...), @Published 变化触发视图重绘。
 struct PetExpandedView: View {
     @ObservedObject var vm: PetViewModel
-    var showsPet: Bool
     @ObservedObject var payload: StrongPayload
 
     var body: some View {
         HStack(spacing: 14) {
-            if showsPet {
+            if vm.showsPet {
                 PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: false, size: 46)
             }
             VStack(alignment: .leading, spacing: 6) {

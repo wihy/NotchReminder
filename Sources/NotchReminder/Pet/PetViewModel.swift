@@ -10,8 +10,13 @@ public final class PetViewModel: ObservableObject {
     @Published public private(set) var act: PetAct?
     @Published public private(set) var isAwake: Bool = true
     @Published public private(set) var isPetting: Bool = false
+    /// 宠物是否显示的唯一真相源。长存 notch 的 compact/expanded 闭包捕获 vm,
+    /// 改此值即触发视图重绘(即便闭包是在 attachPet 时建的一次性视图树)。
+    @Published public private(set) var showsPet: Bool = true
 
     public init() {}
+
+    public func setShowsPet(_ on: Bool) { showsPet = on }
 
     public func setMood(_ m: PetMood) { mood = m }
     public func playAct(_ a: PetAct) { act = a }

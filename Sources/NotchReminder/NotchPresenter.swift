@@ -11,7 +11,7 @@ public enum SitAction: Equatable {
 /// 封装 DynamicNotchKit 的渲染。Task 4: 从「每条提醒新建临时 notch」重构为
 /// **单一长存 DynamicNotch**——compactLeading = 宠物团子(平时呼吸), expanded = 提醒卡(PetExpandedView)。
 /// 启动后 attachPet() 建一次 notch + 注冊灭屏观察; 平时 compact, 提醒 expand, 演完回 compact(不消失)。
-/// petEnabled=false 时用 hide(而非 compact)降级(宠物不可见)。整类 @MainActor。
+/// petVM.showsPet=false 时用 hide(而非 compact)降级(宠物不可见)。整类 @MainActor。
 @MainActor
 public final class NotchPresenter {
     /// 轻样式停留时长(秒)。expand() 自身另含 ~0.4s 动画等待, 此为额外停留。
@@ -27,35 +27,35 @@ public final class NotchPresenter {
     /// 强提醒运行时文案/按钮 holder(长存 notch 的 expanded 闭包捕获; sit/night expand 前 set)。
     private let payload = StrongPayload()
     private var powerObserver: ScreenPowerObserver?
-    private var petEnabled: Bool = true
 
     public init() {}
 
     // MARK: - 启动接线(由 AppDelegate 调)
 
-    /// 建长存 notch + 注册灭屏观察; 据 petEnabled 决定初始 compact 还是 hide。
+    /// 建长存 notch + 注册灭屏观察; 据 petVM.showsPet 决定初始 compact 还是 hide。
     public func attachPet() {
         let vm = petVM
         let payload = self.payload
         let n = DynamicNotch(
             expanded: {
-                PetExpandedView(vm: vm, showsPet: self.petEnabled, payload: payload)
+                PetExpandedView(vm: vm, payload: payload)
             },
             compactLeading: {
-                PetCompactView(vm: vm, showsPet: self.petEnabled)
+                PetCompactView(vm: vm)
             }
         )
         notch = n
         powerObserver = ScreenPowerObserver(vm: petVM)
         powerObserver?.start()
         Task { @MainActor in
-            if petEnabled { await n.compact() } else { await n.hide() }
+            if petVM.showsPet { await n.compact() } else { await n.hide() }
         }
     }
 
     /// Task 5 设置窗调: 开/关宠物。on→compact(宠物可见), off→hide(彻底收起)。
+    /// 同时刷 vm.showsPet → 长存 notch 的 compact/expanded 视图(闭包捕获 vm)立即重绘。
     public func setPetEnabled(_ on: Bool) {
-        petEnabled = on
+        petVM.setShowsPet(on)
         Task { @MainActor in
             guard let n = notch else { return }
             if on { await n.compact() } else { await n.hide() }
@@ -93,7 +93,7 @@ public final class NotchPresenter {
                 await n.expand()
                 try? await Task.sleep(for: .seconds(autoHideSeconds))
                 petVM.clearAct()
-                if petEnabled { await n.compact() } else { await n.hide() }
+                if petVM.showsPet { await n.compact() } else { await n.hide() }
             }
         }
     }
@@ -120,11 +120,11 @@ public final class NotchPresenter {
         Task { @MainActor in await n.expand() }
     }
 
-    /// 强提醒按钮点击后: 清演出 + 回 compact(或 petEnabled=false 时 hide)。
+    /// 强提醒按钮点击后: 清演出 + 回 compact(或 petVM.showsPet=false 时 hide)。
     private func afterStrong(n: DynamicNotch<PetExpandedView, PetCompactView, EmptyView>) {
         petVM.clearAct()
         Task { @MainActor in
-            if petEnabled { await n.compact() } else { await n.hide() }
+            if petVM.showsPet { await n.compact() } else { await n.hide() }
         }
     }
 
