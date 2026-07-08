@@ -64,7 +64,7 @@ swift test
 
 ```bash
 # 把 cc-plugin/ 作为本地 marketplace 加进 Claude Code
-claude plugin marketplace add /Users/chunhaixu/NotchReminder/cc-plugin
+claude plugin marketplace add ./cc-plugin
 claude plugin install notchreminder@notchreminder --scope user
 claude plugin enable  notchreminder@notchreminder --scope user
 ```

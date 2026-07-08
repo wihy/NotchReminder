@@ -23,7 +23,7 @@ echo "    CC 插件 notchreminder 已移除(重启 claude 会话后 hooks 失效
 
 echo "==> [3/3] 状态目录"
 if [ "$PURGE" -eq 1 ]; then
-  rm -rf "$STATE_DIR"
+  rm -rf "$STATE_DIR" || true
   echo "    已删除 $STATE_DIR(--purge)"
 else
   echo "    保留 $STATE_DIR(如需一并删除, 重跑: $0 --purge)"

@@ -4,7 +4,7 @@ set -euo pipefail
 # NotchReminder 一键安装: 构建二进制 → 装 CC 插件 → 装开机自启 LaunchAgent。
 # 幂等: 可重复运行。所有路径按本仓库固定位置写死。
 
-REPO="/Users/chunhaixu/NotchReminder"
+REPO="$(cd "$(dirname "$0")" && pwd)"
 BIN="$REPO/.build/release/NotchReminder"
 PLUGIN_DIR="$REPO/cc-plugin"
 STATE_DIR="$HOME/.notchreminder"
