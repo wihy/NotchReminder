@@ -54,6 +54,10 @@ enum LaunchAgent {
             <string>Interactive</string>
             <key>LimitLoadToSessionType</key>
             <string>Aqua</string>
+            <key>StandardOutPath</key>
+            <string>\(NSHomeDirectory())/.notchreminder/agent.out.log</string>
+            <key>StandardErrorPath</key>
+            <string>\(NSHomeDirectory())/.notchreminder/agent.err.log</string>
         </dict>
         </plist>
         """
