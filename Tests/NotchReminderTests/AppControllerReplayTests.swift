@@ -35,4 +35,22 @@ final class AppControllerReplayTests: XCTestCase {
         controller.flushPending()           // 仍全屏 → 保留
         XCTAssertEqual(controller.pending, [.water])
     }
+
+    // MARK: - 投屏镜像静默
+
+    func testCastingRoutesToPendingWhenEnabled() {
+        let controller = AppController(presenter: NotchPresenter(), dnd: { false },
+                                       casting: { true }, ccProvider: { nil })
+        controller.castingSilenceEnabled = true
+        controller.route([.water])
+        XCTAssertEqual(controller.pending, [.water])   // 投屏中 + 开关开 → 入队
+    }
+
+    func testCastingIgnoredWhenDisabled() {
+        let controller = AppController(presenter: NotchPresenter(), dnd: { false },
+                                       casting: { true }, ccProvider: { nil })
+        controller.castingSilenceEnabled = false        // 默认关 → 投屏不抑制
+        controller.route([.water])
+        XCTAssertTrue(controller.pending.isEmpty)
+    }
 }

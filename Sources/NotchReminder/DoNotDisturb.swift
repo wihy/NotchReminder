@@ -58,6 +58,14 @@ public enum DoNotDisturb {
         return false
     }
 
+    // MARK: - 投屏 / 屏幕镜像检测
+
+    /// 主显示器是否处于镜像组(AirPlay / 有线镜像 / 投屏)。
+    /// CGDisplayIsInMirrorSet 是 CoreGraphics 公开 API, 镜像时主屏归入镜像组返回 true。
+    public static func isMirroringActive() -> Bool {
+        CGDisplayIsInMirrorSet(CGMainDisplayID()) != 0
+    }
+
     /// 窗口是否近似覆盖整块屏(原点重合、宽高不小于屏)。
     private static func coversFullScreen(window: CGRect, screen: CGRect) -> Bool {
         let tol: CGFloat = 1

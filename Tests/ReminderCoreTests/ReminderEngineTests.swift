@@ -171,6 +171,128 @@ final class ReminderEngineTests: XCTestCase {
         XCTAssertEqual(s.eyeAccum, 0)
     }
 
+    // MARK: - water / eye 忽略后静默(snooze)
+
+    func testWaterSnoozeSuppressesThenFires() {
+        var cfg = ReminderConfig()
+        cfg.waterSnooze = 10 * 60   // 触发后静默 10min
+        // 已越过阈值、刚在 base 报过一次。10s 步长避免 dormant。
+        var s = ReminderState(waterAccum: cfg.waterThreshold + 60, lastSample: base, lastWaterAlert: base)
+        var t = base
+        var firedInSnooze = false
+        for _ in 0..<(8 * 6) {   // 推进 8min(< 10min snooze)
+            t = t.addingTimeInterval(10)
+            var r: [Reminder]
+            (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+            if r.contains(.water) { firedInSnooze = true }
+        }
+        XCTAssertFalse(firedInSnooze)          // snooze 窗口内不重复
+        XCTAssertTrue(s.waterAccum >= cfg.waterThreshold)  // 被 snooze 挡下时不清零
+        var firedAfter = false
+        for _ in 0..<(4 * 6) {   // 再推进 4min(累计 12min > 10min)
+            t = t.addingTimeInterval(10)
+            var r: [Reminder]
+            (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+            if r.contains(.water) { firedAfter = true }
+        }
+        XCTAssertTrue(firedAfter)              // snooze 过后恢复触发(清零由 zero-snooze 用例守卫)
+    }
+
+    func testEyeSnoozeSuppressesThenFires() {
+        var cfg = ReminderConfig()
+        cfg.eyeSnooze = 10 * 60
+        var s = ReminderState(eyeAccum: cfg.eyeThreshold + 60, lastSample: base, lastEyeAlert: base)
+        var t = base
+        var firedInSnooze = false
+        for _ in 0..<(8 * 6) {
+            t = t.addingTimeInterval(10)
+            var r: [Reminder]
+            (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+            if r.contains(.eye) { firedInSnooze = true }
+        }
+        XCTAssertFalse(firedInSnooze)
+        var firedAfter = false
+        for _ in 0..<(4 * 6) {
+            t = t.addingTimeInterval(10)
+            var r: [Reminder]
+            (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+            if r.contains(.eye) { firedAfter = true }
+        }
+        XCTAssertTrue(firedAfter)
+    }
+
+    func testWaterSnoozeZeroKeepsCurrentBehavior() {
+        // 默认 snooze=0: 触发即清零, 与现状一致(回归守卫)。
+        let cfg = ReminderConfig()   // waterSnooze 默认 0
+        var s = ReminderState(waterAccum: cfg.waterThreshold - 5, lastSample: base)
+        let t = base.addingTimeInterval(10)
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.contains(.water))
+        XCTAssertEqual(s.waterAccum, 0)
+    }
+
+    // MARK: - 定时勿扰(DND)
+
+    /// 本地时区某天某时刻(基准 2026-07-07)。
+    private func at(hour: Int, minute: Int) -> Date {
+        var comps = DateComponents()
+        comps.year = 2026; comps.month = 7; comps.day = 7
+        comps.hour = hour; comps.minute = minute; comps.second = 0
+        return Calendar.current.date(from: comps)!
+    }
+
+    func testIsWithinDNDSameDayWindow() {
+        // 12:00–13:30 窗口: 边界 [start, end)。
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 11, minute: 59), startMinute: 12 * 60, endMinute: 13 * 60 + 30))
+        XCTAssertTrue(ReminderEngine.isWithinDND(at(hour: 12, minute: 0), startMinute: 12 * 60, endMinute: 13 * 60 + 30))
+        XCTAssertTrue(ReminderEngine.isWithinDND(at(hour: 12, minute: 30), startMinute: 12 * 60, endMinute: 13 * 60 + 30))
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 13, minute: 30), startMinute: 12 * 60, endMinute: 13 * 60 + 30))  // end 排除
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 14, minute: 0), startMinute: 12 * 60, endMinute: 13 * 60 + 30))
+    }
+
+    func testIsWithinDNDNilDisabled() {
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 12, minute: 30), startMinute: nil, endMinute: nil))
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 12, minute: 30), startMinute: 12 * 60, endMinute: nil))
+    }
+
+    func testIsWithinDNDCrossMidnight() {
+        // 23:00–07:00 跨午夜(start>end): 视为 [start, 1440) ∪ [0, end)。
+        XCTAssertTrue(ReminderEngine.isWithinDND(at(hour: 23, minute: 30), startMinute: 23 * 60, endMinute: 7 * 60))
+        XCTAssertTrue(ReminderEngine.isWithinDND(at(hour: 2, minute: 0), startMinute: 23 * 60, endMinute: 7 * 60))
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 8, minute: 0), startMinute: 23 * 60, endMinute: 7 * 60))
+        XCTAssertFalse(ReminderEngine.isWithinDND(at(hour: 22, minute: 59), startMinute: 23 * 60, endMinute: 7 * 60))
+    }
+
+    func testDNDSuppressesRemindersButKeepsTiming() {
+        var cfg = ReminderConfig()
+        cfg.dndStartMinute = 12 * 60          // 12:00
+        cfg.dndEndMinute = 13 * 60 + 30       // 13:30
+        // 12:30 落在窗口内: water 已到阈值应触发清零(计时照常), 但产出被抑制。
+        // 用 10s 步长避免触发 dormant(dt>restThreshold)使 water 被暂停而非累加。
+        let t = at(hour: 12, minute: 30)
+        var s = ReminderState(waterAccum: cfg.waterThreshold - 5, eyeAccum: cfg.eyeThreshold - 5,
+                              lastSample: t.addingTimeInterval(-10))
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.isEmpty)              // 窗口内 → 不产出
+        XCTAssertEqual(s.waterAccum, 0)       // 但 water 已触发清零(计时照常推进)
+        XCTAssertEqual(s.eyeAccum, 0)
+    }
+
+    func testOutsideDNDFires() {
+        var cfg = ReminderConfig()
+        cfg.dndStartMinute = 12 * 60
+        cfg.dndEndMinute = 13 * 60 + 30
+        // 14:00 在窗口外: 正常产出。
+        let before = at(hour: 13, minute: 59)
+        var s = ReminderState(waterAccum: cfg.waterThreshold - 5, lastSample: before)
+        let t = at(hour: 14, minute: 0)
+        var r: [Reminder]
+        (s, r) = ReminderEngine.advance(s, config: cfg, sample: Sample(now: t, idleSeconds: 0))
+        XCTAssertTrue(r.contains(.water))
+    }
+
     func testMultipleRemindersInOrder() {
         var cfg = ReminderConfig()
         cfg.sitEnabled = true; cfg.waterEnabled = true; cfg.eyeEnabled = true; cfg.nightEnabled = true

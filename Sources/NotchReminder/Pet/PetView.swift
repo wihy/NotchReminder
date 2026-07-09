@@ -26,6 +26,18 @@ struct BlobShape: Shape {
     }
 }
 
+/// 顶点朝上的等腰三角(猫耳 / 水灵尖角 / 装饰用)。
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
 // MARK: - 单只团子(共享姿态逻辑)
 
 /// 按 mood/act/isPetting 选颜色 + squash + 眼/嘴装饰。compact 与 expanded 复用。
@@ -35,8 +47,15 @@ struct PetBlob: View {
     let isAwake: Bool
     let isPetting: Bool
     var size: CGFloat = 40
+    /// 配色主题覆盖: 非 nil 时替代按 mood 的默认色(设计稿配色主题)。
+    var colorOverride: Color? = nil
+    /// 动画强度倍率(0...1 附近): 乘到 act 脉冲与摇晃幅度。默认 1 = 现状。
+    var animationScale: CGFloat = 1
+    /// 形象: "blob" | "cat" | "droplet" | "sprout"。以轻量装饰区分, 主体形状共用。
+    var character: String = "blob"
 
     private var color: Color {
+        if let colorOverride { return colorOverride }
         switch mood {
         case .fresh:     return Color(red: 0.55, green: 0.85, blue: 0.95)
         case .calm:      return Color(red: 0.60, green: 0.80, blue: 0.90)
@@ -97,18 +116,18 @@ struct PetBlob: View {
         return eyeOpenBase
     }
 
-    /// 动作叠加的纵向缩放(drink 点头下沉 / stretch 向上拉伸)。
+    /// 动作叠加的纵向缩放(drink 点头下沉 / stretch 向上拉伸)。幅度乘 animationScale。
     private var actScaleY: CGFloat {
         switch act {
-        case .drink:   return 1 - actPhase * 0.12   // 咕咚: 微微下压
-        case .stretch: return 1 + actPhase * 0.18   // 伸懒腰: 纵向拉长脉冲
+        case .drink:   return 1 - actPhase * 0.12 * animationScale   // 咕咚: 微微下压
+        case .stretch: return 1 + actPhase * 0.18 * animationScale   // 伸懒腰: 纵向拉长脉冲
         default:       return 1
         }
     }
-    /// 动作叠加的旋转角(yawn/drink 轻晃)。
+    /// 动作叠加的旋转角(yawn/drink 轻晃)。幅度乘 animationScale。
     private var swayAngle: Angle {
         guard act == .yawn || act == .drink else { return .zero }
-        return .degrees(Double(sway) * 4)
+        return .degrees(Double(sway) * 4 * Double(animationScale))
     }
 
     var body: some View {
@@ -140,7 +159,7 @@ struct PetBlob: View {
                 eye(open: eyeOpen)
                 eye(open: eyeOpen)
             }
-            .offset(x: gaze * size * 0.10, y: -size * 0.08)
+            .offset(x: gaze * size * 0.10 * animationScale, y: -size * 0.08)
             // 嘴: 打哈欠时随 actPhase 张大, sleepy 小圆点
             if act == .yawn {
                 Ellipse().fill(Color.black.opacity(0.55))
@@ -150,14 +169,22 @@ struct PetBlob: View {
                 Circle().fill(Color.black.opacity(0.55)).frame(width: size*0.10, height: size*0.10)
                     .offset(y: size * 0.12)
             }
+            // exhausted 冒汗: 改用 SF Symbol 水滴(去 emoji)。
             if mood == .exhausted {
-                Text(verbatim: "💦").font(.system(size: size*0.28)).offset(x: size*0.32, y: -size*0.28)
+                Image(systemName: "drop.fill")
+                    .font(.system(size: size*0.24))
+                    .foregroundStyle(.cyan)
+                    .offset(x: size*0.32, y: -size*0.28)
             }
+            // 睡着/dozing 的「zzz」: 改用 SF Symbol(去 emoji)。
             if !isAwake || mood == .dozing {
-                Text(verbatim: "z").font(.system(size: size*0.30, weight: .bold))
+                Image(systemName: "zzz")
+                    .font(.system(size: size*0.30, weight: .bold))
+                    .foregroundStyle(.secondary)
                     .offset(x: size*0.30, y: -size*0.34)
             }
         }
+        .overlay(characterAccent)
         .scaleEffect(x: 1, y: actScaleY, anchor: .bottom)
         .rotationEffect(swayAngle)
         // 形变(squash)/rua 用弹簧插值 → 状态切换时 Q 弹一下, 不是瞬变。
@@ -195,6 +222,36 @@ struct PetBlob: View {
             withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { sway = 1 }
         case .none:
             break
+        }
+    }
+
+    /// 形象轻量装饰: 主体形状共用, 用顶部小装饰区分四款(cat 耳 / droplet 尖 / sprout 叶)。
+    @ViewBuilder
+    private var characterAccent: some View {
+        switch character {
+        case "cat":
+            // 两只三角猫耳
+            HStack(spacing: size * 0.34) {
+                Triangle().fill(color.darker(0.06)).frame(width: size*0.24, height: size*0.22)
+                Triangle().fill(color.darker(0.06)).frame(width: size*0.24, height: size*0.22)
+            }
+            .offset(y: -size * 0.5)
+            .allowsHitTesting(false)
+        case "droplet":
+            // 顶部一枚水灵尖角
+            Triangle().fill(color.lighter(0.12))
+                .frame(width: size*0.22, height: size*0.30)
+                .offset(y: -size * 0.52)
+                .allowsHitTesting(false)
+        case "sprout":
+            // 顶部一片小芽叶
+            Ellipse().fill(Color(red: 0.45, green: 0.78, blue: 0.5))
+                .frame(width: size*0.16, height: size*0.30)
+                .rotationEffect(.degrees(-25))
+                .offset(x: size*0.05, y: -size * 0.5)
+                .allowsHitTesting(false)
+        default:
+            EmptyView()  // blob: 无装饰
         }
     }
 
@@ -237,19 +294,33 @@ private extension Color {
 
 // MARK: - compact(刘海旁)
 
-/// 刘海旁的小团子。绑 vm, 平时呼吸 + 偶尔眨眼(由 act/isPetting 覆盖)。showsPet=false → EmptyView。
+/// 刘海旁的小团子。绑 vm, 平时呼吸 + 偶尔眨眼(由 act/isPetting 覆盖)。
+/// slot 标明本视图挂在刘海哪侧("left"=compactLeading, "right"=compactTrailing);
+/// 仅当 vm.side == slot 且 showsPet 时渲染, 从而支持左右侧位实时切换。
 struct PetCompactView: View {
     @ObservedObject var vm: PetViewModel
+    var slot: String = "left"
+    /// 点击团子的回调(用于打开设置窗)。
+    var onTap: (() -> Void)? = nil
 
     // 呼吸: 缓慢 scale autoreverse(~3.5s)。只在 awake 时动。
     @State private var breathe = false
 
+    /// 动画强度倍率(0.5...1): 低强度 → 呼吸更慢、幅度更小。
+    private var animScale: CGFloat { 0.5 + 0.5 * vm.animationIntensity }
+
     var body: some View {
         Group {
-            if vm.showsPet {
-                PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: vm.isPetting, size: 22)
-                    .scaleEffect(vm.isAwake && vm.act == nil ? (breathe ? 1.08 : 0.93) : 1)
-                    .animation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true), value: breathe)
+            if vm.showsPet && vm.side == slot {
+                PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: vm.isPetting,
+                        size: 22 * vm.sizeScale, colorOverride: vm.themeColor,
+                        animationScale: animScale, character: vm.character)
+                    .scaleEffect(vm.isAwake && vm.act == nil
+                                 ? (breathe ? 1 + 0.08 * animScale : 1 - 0.07 * animScale) : 1)
+                    .animation(.easeInOut(duration: 3.0 / max(0.3, animScale)).repeatForever(autoreverses: true), value: breathe)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap?() }
+                    .help("点我打开 NotchReminder 设置")
                     .onAppear {
                         if vm.isAwake { breathe.toggle() }
                     }
@@ -302,7 +373,9 @@ struct PetExpandedView: View {
     var body: some View {
         HStack(spacing: 14) {
             if vm.showsPet {
-                PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: false, size: 46)
+                PetBlob(mood: vm.mood, act: vm.act, isAwake: vm.isAwake, isPetting: false,
+                        size: 46 * vm.sizeScale, colorOverride: vm.themeColor,
+                        animationScale: 0.5 + 0.5 * vm.animationIntensity, character: vm.character)
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(verbatim: payload.title).font(.headline).foregroundStyle(.primary)

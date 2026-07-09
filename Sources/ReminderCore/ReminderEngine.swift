@@ -9,6 +9,16 @@ public enum ReminderEngine {
         return hour >= 23 || hour < 2
     }
 
+    /// now 是否落在定时勿扰窗口内(本地时区当天分钟数, 支持跨午夜: start>end 视为跨天)。
+    /// 边界为 [start, end): 含起点、不含终点。start/end 任一为 nil → 不启用, 恒 false。
+    public static func isWithinDND(_ now: Date, startMinute: Int?, endMinute: Int?,
+                                   calendar: Calendar = .current) -> Bool {
+        guard let s = startMinute, let e = endMinute else { return false }
+        let c = calendar.dateComponents([.hour, .minute], from: now)
+        let m = (c.hour ?? 0) * 60 + (c.minute ?? 0)
+        return s <= e ? (m >= s && m < e) : (m >= s || m < e)
+    }
+
     /// 把时间格式化为 "HH:mm"(24 小时制, 本地时区)。
     public static func clockString(_ now: Date, calendar: Calendar = .current) -> String {
         let comps = calendar.dateComponents([.hour, .minute], from: now)
@@ -86,16 +96,31 @@ public enum ReminderEngine {
             }
         }
 
-        // water
+        // water(带「忽略后静默」snooze: snooze<=0 时行为不变——触发即清零)
         if config.waterEnabled && newState.waterAccum >= config.waterThreshold {
-            reminders.append(.water)
-            newState.waterAccum = 0
+            let snoozeOK: Bool = {
+                guard config.waterSnooze > 0, let last = newState.lastWaterAlert else { return true }
+                return now.timeIntervalSince(last) >= config.waterSnooze
+            }()
+            if snoozeOK {
+                reminders.append(.water)
+                newState.waterAccum = 0
+                newState.lastWaterAlert = now
+            }
+            // snooze 窗口内: 不触发、不清零(保留 accum, 窗口过后下拍即触发)
         }
 
-        // eye
+        // eye(同 water: 带 snooze gate)
         if config.eyeEnabled && newState.eyeAccum >= config.eyeThreshold {
-            reminders.append(.eye)
-            newState.eyeAccum = 0
+            let snoozeOK: Bool = {
+                guard config.eyeSnooze > 0, let last = newState.lastEyeAlert else { return true }
+                return now.timeIntervalSince(last) >= config.eyeSnooze
+            }()
+            if snoozeOK {
+                reminders.append(.eye)
+                newState.eyeAccum = 0
+                newState.lastEyeAlert = now
+            }
         }
 
         // night
@@ -110,8 +135,11 @@ public enum ReminderEngine {
             }
         }
 
-        // ---- 5) muted 抑制产出(计时已照常推进) ----
+        // ---- 5) muted / 定时勿扰 抑制产出(计时均已照常推进) ----
         if let mutedUntil = config.mutedUntil, now < mutedUntil {
+            return (newState, [])
+        }
+        if isWithinDND(now, startMinute: config.dndStartMinute, endMinute: config.dndEndMinute) {
             return (newState, [])
         }
 

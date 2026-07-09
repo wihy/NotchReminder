@@ -63,9 +63,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        // 手动动作
-        addItem("☕️ 我起身了", #selector(didTapManualRest))
-        addItem("🔕 专注 1 小时", #selector(didTapFocusOneHour))
+        // 手动动作(图标用 SF Symbols, 不用 emoji)
+        addItem("我起身了", systemImage: "figure.walk", #selector(didTapManualRest))
+        addItem("专注 1 小时", systemImage: "moon.zzz", #selector(didTapFocusOneHour))
 
         menu.addItem(.separator())
 
@@ -77,8 +77,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        addItem("⚙️ 设置…", #selector(didTapSettings))
-        addItem("退出", #selector(didTapQuit))
+        addItem("设置…", systemImage: "gearshape", #selector(didTapSettings))
+        addItem("退出", systemImage: "power", #selector(didTapQuit))
     }
 
     // MARK: - Item helpers
@@ -92,6 +92,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     private func addItem(_ title: String, _ action: Selector) {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
+        menu.addItem(item)
+    }
+
+    /// 带 SF Symbol 图标的菜单项(替代 emoji 前缀)。
+    private func addItem(_ title: String, systemImage: String, _ action: Selector) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: title)
         menu.addItem(item)
     }
 
@@ -117,8 +125,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func didToggleEye()   { toggle { $0.eyeEnabled.toggle() } }
     @objc private func didToggleNight() { toggle { $0.nightEnabled.toggle() } }
 
-    @objc private func didTapSettings() {
+    /// 打开设置窗(菜单「设置…」与「点击刘海团子」共用同一单例窗)。
+    func showSettings() {
         settingsWC.show()
+    }
+
+    @objc private func didTapSettings() {
+        showSettings()
     }
 
     @objc private func didTapQuit() {

@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let c = AppController(presenter: presenter, config: settingsStore.load())  // 初始 config 来自持久化
         c.onSitSnooze = { [weak c] in c?.manualRest() }   // snooze 与「我起身了」同一清零语义(CONTRACT §C3)
+        c.fullscreenSilenceEnabled = settingsStore.fullscreenSilence   // 免打扰:全屏应用静默总开关
+        c.castingSilenceEnabled = settingsStore.castingSilence         // 免打扰:投屏/镜像静默总开关
         AppController.shared = c                            // 供菜单/设置窗访问
         controller = c
         // Task 7: 完整菜单 + 首启引导(替换 Task 1 的占位菜单)
@@ -24,7 +26,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // I1 修复: 先把 petEnabled 落到 vm(showsPet), 再 attachPet 统一按 showsPet + pauseOnBattery
         // 决策初始态。不再在 attachPet 之后独立 setPetEnabled(会无条件 compact, 覆盖电池静止)。
         presenter.setPetEnabled(settingsStore.petEnabled)
-        presenter.attachPet(pauseOnBattery: settingsStore.petPauseOnBattery)
+        presenter.attachPet(
+            pauseOnBattery: settingsStore.petPauseOnBattery,
+            config: settingsStore.load(),
+            cardDwellSeconds: settingsStore.cardDwellSeconds,
+            breathingLight: settingsStore.breathingLight,
+            soundEnabled: settingsStore.soundEnabled,
+            sitSound: settingsStore.sitSound,
+            waterSound: settingsStore.waterSound,
+            eyeSound: settingsStore.eyeSound,
+            nightSound: settingsStore.nightSound,
+            cardPosition: settingsStore.cardPosition,
+            petCharacter: settingsStore.petCharacter,
+            petColorTheme: settingsStore.petColorTheme,
+            petSizeScale: CGFloat(settingsStore.petSizeScale),
+            petSide: settingsStore.petSide,
+            petAnimationIntensity: CGFloat(settingsStore.petAnimationIntensity)
+        )
+        // 点击刘海团子打开设置(菜单栏图标在刘海屏易被挤没, 团子是常驻可点入口)。
+        presenter.onPetTap = { [weak mbc] in mbc?.showSettings() }
         c.start()
     }
 }

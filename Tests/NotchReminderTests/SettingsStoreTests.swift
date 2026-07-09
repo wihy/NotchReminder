@@ -83,6 +83,90 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.strongStyleStaysLonger)
     }
 
+    func testNewConfigFieldsRoundTrip() {
+        let store = SettingsStore(defaults: defaults)
+        var cfg = ReminderConfig()
+        cfg.sitStyle = .light
+        cfg.waterStyle = .strong
+        cfg.eyeStyle = .strong
+        cfg.nightStyle = .light
+        cfg.waterSnooze = 10 * 60
+        cfg.eyeSnooze = 5 * 60
+        cfg.dndStartMinute = 22 * 60 + 30
+        cfg.dndEndMinute = 7 * 60
+        cfg.sitTitleTemplate = "坐了 {minutes} 分钟"
+        cfg.waterSubtitleTemplate = "喝水吧 {clock}"
+        cfg.nightTitleTemplate = "{clock} 该睡了"
+        store.save(cfg)
+
+        let r = SettingsStore(defaults: defaults).load()
+        XCTAssertEqual(r.sitStyle, .light)
+        XCTAssertEqual(r.waterStyle, .strong)
+        XCTAssertEqual(r.eyeStyle, .strong)
+        XCTAssertEqual(r.nightStyle, .light)
+        XCTAssertEqual(r.waterSnooze, 10 * 60)
+        XCTAssertEqual(r.eyeSnooze, 5 * 60)
+        XCTAssertEqual(r.dndStartMinute, 22 * 60 + 30)
+        XCTAssertEqual(r.dndEndMinute, 7 * 60)
+        XCTAssertEqual(r.sitTitleTemplate, "坐了 {minutes} 分钟")
+        XCTAssertEqual(r.waterSubtitleTemplate, "喝水吧 {clock}")
+        XCTAssertEqual(r.nightTitleTemplate, "{clock} 该睡了")
+        // 未设置的模板保持 nil(= 内置默认)
+        XCTAssertNil(r.eyeTitleTemplate)
+    }
+
+    func testDNDNilRoundTripsAsDisabled() {
+        let store = SettingsStore(defaults: defaults)
+        var cfg = ReminderConfig()
+        cfg.dndStartMinute = 60
+        cfg.dndEndMinute = 120
+        store.save(cfg)
+        XCTAssertEqual(SettingsStore(defaults: defaults).load().dndStartMinute, 60)
+        // 关闭勿扰: 存回 nil 应清除, load 得 nil。
+        cfg.dndStartMinute = nil
+        cfg.dndEndMinute = nil
+        store.save(cfg)
+        XCTAssertNil(SettingsStore(defaults: defaults).load().dndStartMinute)
+        XCTAssertNil(SettingsStore(defaults: defaults).load().dndEndMinute)
+    }
+
+    func testAppearancePrefsRoundTrip() {
+        let store = SettingsStore(defaults: defaults)
+        // 默认值
+        XCTAssertEqual(store.scenario, .custom)
+        XCTAssertTrue(store.soundEnabled)
+        XCTAssertFalse(store.breathingLight)
+        XCTAssertEqual(store.cardDwellSeconds, 4)
+        XCTAssertEqual(store.cardPosition, "notch")
+        XCTAssertEqual(store.petColorTheme, "sky")
+        XCTAssertEqual(store.petSizeScale, 1.0)
+        XCTAssertEqual(store.petSide, "left")
+        XCTAssertEqual(store.petAnimationIntensity, 0.6, accuracy: 0.0001)
+
+        store.scenario = .relax
+        store.soundEnabled = false
+        store.soundName = "Submarine"
+        store.breathingLight = true
+        store.cardDwellSeconds = 7
+        store.cardPosition = "topRight"
+        store.petColorTheme = "rose"
+        store.petSizeScale = 1.2
+        store.petSide = "right"
+        store.petAnimationIntensity = 0.9
+
+        let r = SettingsStore(defaults: defaults)
+        XCTAssertEqual(r.scenario, .relax)
+        XCTAssertFalse(r.soundEnabled)
+        XCTAssertEqual(r.soundName, "Submarine")
+        XCTAssertTrue(r.breathingLight)
+        XCTAssertEqual(r.cardDwellSeconds, 7)
+        XCTAssertEqual(r.cardPosition, "topRight")
+        XCTAssertEqual(r.petColorTheme, "rose")
+        XCTAssertEqual(r.petSizeScale, 1.2)
+        XCTAssertEqual(r.petSide, "right")
+        XCTAssertEqual(r.petAnimationIntensity, 0.9, accuracy: 0.0001)
+    }
+
     func testPetPrefsRoundTrip() {
         let store = SettingsStore(defaults: defaults)
         // petEnabled 默认 true(首次无存值); petPauseOnBattery 默认 false; petCharacter 默认 "blob"

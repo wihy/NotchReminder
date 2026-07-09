@@ -33,7 +33,7 @@ enum FirstRunGuide {
         · 计时基于系统空闲时长(只读), 无需辅助功能权限。
         · 想让提醒带上当前 Claude Code 项目名, 可装 CC 插件:
           \(ccInstallCommand)
-        · 阈值、开关、开机自启都能在菜单栏「⚙️ 设置…」里调。
+        · 阈值、开关、开机自启都能在菜单栏「设置…」里调。
         """
         alert.addButton(withTitle: "知道了")
         alert.alertStyle = .informational

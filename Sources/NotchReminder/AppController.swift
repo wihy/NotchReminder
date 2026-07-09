@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import ReminderCore
 
 /// 判定「当前是否全屏」的探针。Task 3 默认 { false }(永不全屏), Task 5 Modify 改默认为 DoNotDisturb.isFullscreenActive; 单测可注入假探针。
@@ -19,6 +20,8 @@ public final class AppController {
     private let idleProvider: () -> Double
     private let clock: () -> Date
     private let isFullscreen: FullscreenProbe
+    /// 投屏/镜像探针。默认 DoNotDisturb.isMirroringActive; 单测可注入假探针。
+    private let isCasting: FullscreenProbe
     /// CC 信号读取。默认读真实 ~/.notchreminder/cc.json; 可注入以隔离测试
     /// (否则单测会依赖真实文件, 其 last_event 与测试固定时间戳的相对关系会毒化 rest/byCC 判定)。
     private let ccProvider: () -> CCSignal?
@@ -30,12 +33,23 @@ public final class AppController {
     /// 强样式 snooze / 菜单「起身了」回调。App 启动时接为 manualRest(见 main.swift)。
     public var onSitSnooze: (() -> Void)?
 
+    /// 全屏应用静默总开关(设计稿免打扰面板)。false → 忽略全屏探针, 提醒照常弹。默认 true = 现状。
+    public var fullscreenSilenceEnabled: Bool = true
+    /// 投屏/演示静默总开关。默认 false = 现状(不因投屏抑制)。
+    public var castingSilenceEnabled: Bool = false
+
+    /// 是否应因全屏或投屏而抑制: 各自开关开启且对应探针命中。route/flushPending 统一用它。
+    private var suppressForDND: Bool {
+        (fullscreenSilenceEnabled && isFullscreen()) || (castingSilenceEnabled && isCasting())
+    }
+
     public init(
         presenter: NotchPresenter,
         config: ReminderConfig = ReminderConfig(),
         idleProvider: @escaping () -> Double = ActivityMonitor.currentIdleSeconds,
         clock: @escaping () -> Date = { Date() },
         dnd: @escaping FullscreenProbe = DoNotDisturb.isFullscreenActive,
+        casting: @escaping FullscreenProbe = DoNotDisturb.isMirroringActive,
         ccProvider: @escaping () -> CCSignal? = { CCSignalReader().read() }
     ) {
         self.presenter = presenter
@@ -43,6 +57,7 @@ public final class AppController {
         self.idleProvider = idleProvider
         self.clock = clock
         self.isFullscreen = dnd
+        self.isCasting = casting
         self.ccProvider = ccProvider
     }
 
@@ -87,7 +102,7 @@ public final class AppController {
     /// advance 产出的提醒逐条路由: 全屏 → 记 pending; 否则立即 present。
     public func route(_ reminders: [Reminder]) {
         for r in reminders {
-            if isFullscreen() {
+            if suppressForDND {
                 pending.append(r)
             } else {
                 show(r)
@@ -98,7 +113,7 @@ public final class AppController {
     /// 免打扰结束后补放 pending。全屏仍在则整体继续挂起(不丢)。
     public func flushPending() {
         guard !pending.isEmpty else { return }
-        guard !isFullscreen() else { return }
+        guard !suppressForDND else { return }
         let queued = pending
         pending.removeAll()
         for r in queued { show(r) }
@@ -112,9 +127,10 @@ public final class AppController {
 
     // MARK: - 命令面(CONTRACT §C3c)
 
-    /// 替换配置并立即生效(采样循环下一拍即用新值)。
+    /// 替换配置并立即生效(采样循环下一拍即用新值)。同时把每类样式/文案模板下发 presenter。
     public func applyConfig(_ config: ReminderConfig) {
         _config = config
+        presenter.applyReminderConfig(config)
     }
 
     /// 手动「我起身了」/ 强样式 snooze: 置 sitAccum=0、lastSitAlert=nil(与 onSitSnooze 同一实现)。
@@ -133,5 +149,21 @@ public final class AppController {
     /// Task 5 设置窗调: 转发宠物开关到 presenter(不暴露 presenter 私有性)。
     public func presenterSetPetEnabled(_ on: Bool) {
         presenter.setPetEnabled(on)
+    }
+
+    /// 设置窗调: 转发提醒方式 pref(停留时长 / 呼吸灯 / 提示音总开关 + 每类音名)到 presenter, 实时生效。
+    public func presenterApplyDisplayPrefs(cardDwellSeconds: TimeInterval, breathingLight: Bool,
+                                           soundEnabled: Bool, sitSound: String, waterSound: String,
+                                           eyeSound: String, nightSound: String, cardPosition: String) {
+        presenter.applyDisplayPrefs(cardDwellSeconds: cardDwellSeconds, breathingLight: breathingLight,
+                                    soundEnabled: soundEnabled, sitSound: sitSound, waterSound: waterSound,
+                                    eyeSound: eyeSound, nightSound: nightSound, cardPosition: cardPosition)
+    }
+
+    /// 设置窗调: 转发宠物外观(形象 / 配色 / 大小 / 侧位 / 动画强度)到 presenter, 实时生效。
+    public func presenterApplyPetAppearance(character: String, colorTheme: String,
+                                            sizeScale: CGFloat, side: String, animationIntensity: CGFloat) {
+        presenter.applyPetAppearance(character: character, colorTheme: colorTheme,
+                                     sizeScale: sizeScale, side: side, animationIntensity: animationIntensity)
     }
 }
